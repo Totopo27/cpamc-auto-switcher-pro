@@ -75,32 +75,32 @@ export default function App() {
 
     // CPAMC Native Menus index mapping:
     // CPAMC expone páginas como #/plugin-pages/<plugin-name>/<index>
-    // En CPAMC los menús se ordenan alfabéticamente por path:
-    // 0: /00-home
-    // 1: /agent-matrix
-    // 2: /audit-log
-    // 3: /auto-auth-files
-    // 4: /control-switcher
-    // 5: /create-groups
-    // 6: /create-prefixes
-    // 7: /maintenance
-    // 8: /profiles
-    // 9: /pulse-tokens
-    // 10: /quick-guide
+    // En CPAMC los menús se ordenan alfabéticamente por path (/00-home, /01-create-groups, etc.):
+    // 0: /00-home (Inicio & Resumen)
+    // 1: /01-create-groups (Armar Pools)
+    // 2: /02-control-switcher (Control Switcher)
+    // 3: /03-auto-auth-files (Auto Auth Files)
+    // 4: /04-create-prefixes (Directorio Cuentas)
+    // 5: /05-agent-matrix (Matriz de Agentes)
+    // 6: /06-pulse-tokens (Pulse Tokens)
+    // 7: /07-profiles (Visual Profile)
+    // 8: /08-audit-log (Bitácora)
+    // 9: /09-maintenance (Salud & Limpieza)
+    // 10: /10-quick-guide (Guía Rápida)
     const numIndexMatch = hash.match(/\/(\d+)(?:\b|\?|$)/);
     if (numIndexMatch) {
       const idx = parseInt(numIndexMatch[1], 10);
       switch (idx) {
         case 0: return 'home';
-        case 1: return 'agent-matrix';
-        case 2: return 'audit-log';
+        case 1: return 'create-groups';
+        case 2: return 'switcher';
         case 3: return 'auto-auth-files';
-        case 4: return 'switcher';
-        case 5: return 'create-groups';
-        case 6: return 'create-prefixes';
-        case 7: return 'maintenance';
-        case 8: return 'profiles';
-        case 9: return 'tokens';
+        case 4: return 'create-prefixes';
+        case 5: return 'agent-matrix';
+        case 6: return 'tokens';
+        case 7: return 'profiles';
+        case 8: return 'audit-log';
+        case 9: return 'maintenance';
         case 10: return 'quick-guide';
         default: break;
       }
@@ -451,7 +451,7 @@ export default function App() {
               <span>Inicio & Resumen</span>
             </button>
 
-            {/* 1. Armar Pools & Grupos */}
+            {/* 1. Armar Pools */}
             <button
               type="button"
               onClick={() => setActiveTab('create-groups')}
@@ -471,7 +471,7 @@ export default function App() {
               data-testid="tab-create-groups"
             >
               <span>🛠️</span>
-              <span>Armar Pools & Grupos</span>
+              <span>Armar Pools</span>
             </button>
 
             {/* 2. Control Switcher */}
@@ -612,7 +612,7 @@ export default function App() {
               <span>Visual Profile</span>
             </button>
 
-            {/* 8. Bitácora & Caja Negra */}
+            {/* 8. Bitácora */}
             <button
               type="button"
               onClick={() => setActiveTab('audit-log')}
@@ -632,7 +632,7 @@ export default function App() {
               data-testid="tab-audit-log"
             >
               <span>📜</span>
-              <span>Bitácora & Caja Negra</span>
+              <span>Bitácora</span>
             </button>
 
             {/* 9. Salud & Limpieza */}
@@ -787,26 +787,26 @@ export default function App() {
             <span className="badge-status">C-ABI v1</span>
             <span className="badge-route">
               {activeTab === 'home'
-                ? '/center'
-                : activeTab === 'create-prefixes'
-                ? '/create-prefixes'
+                ? '/00-home'
                 : activeTab === 'create-groups'
-                ? '/create-groups'
+                ? '/01-create-groups'
                 : activeTab === 'switcher'
-                ? '/control-switcher'
-                : activeTab === 'tokens'
-                ? '/pulse-tokens'
+                ? '/02-control-switcher'
                 : activeTab === 'auto-auth-files'
-                ? '/auto-auth-files'
-                : activeTab === 'maintenance'
-                ? '/maintenance'
-                : activeTab === 'quick-guide'
-                ? '/quick-guide'
-                : activeTab === 'audit-log'
-                ? '/audit-log'
+                ? '/03-auto-auth-files'
+                : activeTab === 'create-prefixes'
+                ? '/04-create-prefixes'
                 : activeTab === 'agent-matrix'
-                ? '/agent-matrix'
-                : '/profiles'}
+                ? '/05-agent-matrix'
+                : activeTab === 'tokens'
+                ? '/06-pulse-tokens'
+                : activeTab === 'profiles'
+                ? '/07-profiles'
+                : activeTab === 'audit-log'
+                ? '/08-audit-log'
+                : activeTab === 'maintenance'
+                ? '/09-maintenance'
+                : '/10-quick-guide'}
             </span>
           </div>
         </div>

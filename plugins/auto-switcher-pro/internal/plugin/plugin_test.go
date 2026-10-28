@@ -103,40 +103,40 @@ func TestHandlePluginMethod_ManagementRegister(t *testing.T) {
 	foundAutoAuthFilesRoute := false
 	foundAuditLogRoute := false
 	for _, res := range payload.Resources {
-		if res.Path == "/profiles" {
+		if strings.Contains(res.Path, "profiles") {
 			foundProfilesRoute = true
 			if res.Menu != "🔵 Visual Profile" {
 				t.Errorf("expected Menu '🔵 Visual Profile', got %q", res.Menu)
 			}
 		}
-		if res.Path == "/pulse-tokens" {
+		if strings.Contains(res.Path, "pulse-tokens") {
 			foundTokensRoute = true
 			if res.Menu != "🏷️ Pulse Tokens" {
 				t.Errorf("expected Menu '🏷️ Pulse Tokens', got %q", res.Menu)
 			}
 		}
-		if res.Path == "/create-prefixes" {
+		if strings.Contains(res.Path, "create-prefixes") {
 			foundCreateRoute = true
 			if res.Menu != "📋 Directorio Cuentas" {
 				t.Errorf("expected Menu '📋 Directorio Cuentas', got %q", res.Menu)
 			}
 		}
-		if res.Path == "/create-groups" {
+		if strings.Contains(res.Path, "create-groups") {
 			foundGroupRoute = true
-			if res.Menu != "🛠️ Armar Pools & Grupos" {
-				t.Errorf("expected Menu '🛠️ Armar Pools & Grupos', got %q", res.Menu)
+			if res.Menu != "🛠️ Armar Pools" {
+				t.Errorf("expected Menu '🛠️ Armar Pools', got %q", res.Menu)
 			}
 		}
-		if res.Path == "/auto-auth-files" {
+		if strings.Contains(res.Path, "auto-auth-files") {
 			foundAutoAuthFilesRoute = true
 			if res.Menu != "🗂️ Auto Auth Files" {
 				t.Errorf("expected Menu '🗂️ Auto Auth Files', got %q", res.Menu)
 			}
 		}
-		if res.Path == "/audit-log" {
+		if strings.Contains(res.Path, "audit-log") {
 			foundAuditLogRoute = true
-			if res.Menu != "📜 Bitácora & Caja Negra" {
-				t.Errorf("expected Menu '📜 Bitácora & Caja Negra', got %q", res.Menu)
+			if res.Menu != "📜 Bitácora" {
+				t.Errorf("expected Menu '📜 Bitácora', got %q", res.Menu)
 			}
 		}
 	}
