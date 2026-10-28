@@ -2187,9 +2187,95 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
                       Elige una familia (Google Gemini, Anthropic Claude, OpenAI Codex u otros) para comenzar a estructurar el pool soberano, asignar la cuenta titular en RAM y configurar su modelo especialista aislado.
                     </p>
                   </div>
+                ) : leaderCandidates.length < 2 ? (
+                  /* RECUADRO PROMINENTE DE CAPACIDAD INSUFICIENTE (0 o 1 cuenta libre) */
+                  leaderCandidates.length === 0 ? (
+                    <div className="group-capacity-notice-box zero-accounts" data-testid="capacity-notice-zero">
+                      <div className="group-capacity-notice-title">
+                        <span>🚫</span>
+                        <span>No hay cuentas libres disponibles para {allModelFamilies[family]?.label || family}</span>
+                      </div>
+                      <p className="group-capacity-notice-desc">
+                        Todas las cuentas registradas de este proveedor ya están operando dentro de pools activos, o aún no has vinculado ninguna credencial física/OAuth en CPAMC.
+                      </p>
+                      <p className="group-capacity-notice-desc" style={{ marginBottom: 16 }}>
+                        Para armar un nuevo pool soberano de <strong>{allModelFamilies[family]?.label || family}</strong>, necesitas al menos <strong>2 cuentas libres</strong> (1 Titular + 1 Suplente). Puedes liberar cuentas en la pestaña <em>"Disolver / Adoptar Reservas"</em> o vincular una nueva en CPAMC.
+                      </p>
+                      <button
+                        type="button"
+                        className="btn-goto-dissolve-prominent"
+                        onClick={() => setActiveTab('dissolve')}
+                        data-testid="btn-goto-dissolve-from-zero"
+                      >
+                        <span>💥</span>
+                        <span>Ir a la Pestaña "Disolver / Adoptar Reservas" para Liberar Cuentas</span>
+                      </button>
+                    </div>
+                  ) : (
+                    /* Caso: 1 sola cuenta libre detectada */
+                    (() => {
+                      const singleAccount = leaderCandidates[0]?.node;
+                      const rawEmail = singleAccount?.data?.email || singleAccount?.name || singleAccount?.id || 'Desconocido';
+                      const fileName = singleAccount?.data?.fileName || singleAccount?.id || '';
+                      const isOmniAuth =
+                        singleAccount?.data?.provider?.toLowerCase()?.includes('omni') ||
+                        fileName.startsWith('omni_') ||
+                        (singleAccount?.data?.accountType || '').toLowerCase().includes('omni') ||
+                        Boolean(singleAccount?.data?.isOmniAuth);
+                      const originLabel = isOmniAuth ? 'OmniAuth Pro' : 'CPAMC Nativo';
+                      const originClass = isOmniAuth ? 'origin-omni' : 'origin-native';
+
+                      return (
+                        <div className="group-capacity-notice-box one-account" data-testid="capacity-notice-one">
+                          <div className="group-capacity-notice-title">
+                            <span>⚠️</span>
+                            <span>Se requiere un mínimo de 2 cuentas para armar un Pool de rotación (Tienes 1)</span>
+                          </div>
+
+                          <p className="group-capacity-notice-desc">
+                            Actualmente solo dispones de <strong>1 cuenta libre</strong> registrada para <strong>{allModelFamilies[family]?.label || family}</strong>:
+                          </p>
+
+                          {/* Tarjeta de Cuenta Detectada Dinámicamente */}
+                          <div className="capacity-detected-account-card" data-testid="card-detected-single-account">
+                            <div className="detected-account-left">
+                              <span>👤</span>
+                              <span>Cuenta detectada:</span>
+                              <span className="detected-account-email" data-testid="detected-account-email">{rawEmail}</span>
+                            </div>
+                            <span className={`detected-account-origin ${originClass}`} data-testid="detected-account-origin">
+                              {originLabel}
+                            </span>
+                          </div>
+
+                          <div className="group-capacity-notice-rules">
+                            Un pool soberano de balanceo y alta disponibilidad exige obligatoriamente:
+                            <div style={{ marginTop: 6 }}>
+                              • 👑 <strong>1 Cuenta Titular</strong> (Líder Activo en RAM que atiende las peticiones)<br />
+                              • 🛡️ <strong>Al menos 1 Suplente de respaldo</strong> para relevar automáticamente ante cuotas agotadas (HTTP 429)
+                            </div>
+                          </div>
+
+                          <p className="group-capacity-notice-desc" style={{ marginBottom: 16 }}>
+                            ¿Tienes cuentas asignadas en otros pools? Puedes liberar suplentes en la pestaña <em>"Disolver / Adoptar"</em>, o vincular una 2ª cuenta para este proveedor en CPAMC.
+                          </p>
+
+                          <button
+                            type="button"
+                            className="btn-goto-dissolve-prominent"
+                            onClick={() => setActiveTab('dissolve')}
+                            data-testid="btn-goto-dissolve-from-one"
+                          >
+                            <span>💥</span>
+                            <span>Ir a la Pestaña "Disolver / Adoptar Reservas" para Liberar Cuentas</span>
+                          </button>
+                        </div>
+                      );
+                    })()
+                  )
                 ) : (
                   <>
-                    {/* Estructuración de Grupo & Pool en 2 columnas: Cuentas (Izquierda) y Modelo Especialista (Derecha) */}
+                    {/* Estructuración de Grupo & Pool en 2 columnas: Solo se muestra si hay 2 o más cuentas libres */}
                     <div className="group-structuring-grid">
                   {/* Columna Izquierda: Titular y Banco de Suplentes */}
                   <div className="group-col-accounts">

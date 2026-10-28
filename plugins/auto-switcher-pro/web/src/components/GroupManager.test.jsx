@@ -190,9 +190,11 @@ describe('GroupManager Component - Dedicated Full Screen Pool & Group Engine', (
     expect(screen.getByTestId('reserves-container').textContent).not.toContain('free2@test.com');
     expect(screen.getByTestId('reserves-container').textContent).toContain('free1@test.com');
 
-    // Changing family invalidates the previous account selection
+    // Changing family invalidates the previous account selection; since codex only has 1 account, it shows the one-account notice
     fireEvent.click(screen.getByTestId('family-codex'));
-    expect(screen.getByTestId('select-active-account').value).toBe('');
+    expect(screen.queryByTestId('select-active-account')).toBeNull();
+    expect(screen.getByTestId('capacity-notice-one')).toBeTruthy();
+    expect(screen.getByTestId('detected-account-email').textContent).toContain('codex1@test.com');
   });
 
   it('allows switching to dissolve tab and releasing existing pool accounts', async () => {
@@ -448,14 +450,13 @@ describe('GroupManager - family-aware pools, honest failures & isolated routes',
       </React.StrictMode>
     );
 
-    // Sin cuentas gemini libres: solo la tarjeta Gemini LIBRE del master claude (modelo 2N)
-    // se ofrece como candidata virtualizable; la de a1 ya está asignada a [g1].
+    // Sin cuentas gemini libres: solo 1 tarjeta Gemini LIBRE del master claude (modelo 2N)
+    // Al haber solo 1 cuenta libre (a2), se oculta el select y se muestra el recuadro prominente con a2 detectada
     fireEvent.click(screen.getByTestId('family-gemini'));
     expect(screen.queryByTestId('no-compatible-accounts-alert')).toBeNull();
-    const optionIds = Array.from(screen.getByTestId('select-active-account').options).map((o) => o.value);
-    expect(optionIds).toContain('a2');
-    expect(optionIds).not.toContain('a1');
-    expect(screen.queryByTestId('btn-save-group').disabled).toBe(true);
+    expect(screen.queryByTestId('select-active-account')).toBeNull();
+    expect(screen.getByTestId('capacity-notice-one')).toBeTruthy();
+    expect(screen.getByTestId('detected-account-email').textContent).toContain('wilsonlavio7@gmail.com');
 
     // Y no hay errores de consola reales
     const realErrors = consoleErrors.filter(
@@ -930,9 +931,8 @@ describe('GroupManager - family-aware pools, honest failures & isolated routes',
 
     // In Claude: all 4 claude cards are now assigned to agy_son virtuals → zero free candidates
     fireEvent.click(screen.getByTestId('subfamily-gemini-opus'));
-    const claude8Options = Array.from(screen.getByTestId('select-active-account').options).filter((o) => o.value !== '');
-    expect(claude8Options).toHaveLength(0);
-    expect(claude8Options.some((o) => o.value.startsWith('v'))).toBe(false);
+    expect(screen.queryByTestId('select-active-account')).toBeNull();
+    expect(screen.getByTestId('capacity-notice-zero')).toBeTruthy();
     expect(screen.getByTestId('no-compatible-accounts-alert')).toBeTruthy();
   });
 });
@@ -1008,8 +1008,8 @@ describe('GroupManager - PoolRegistry como fuente única de verdad', () => {
     });
 
     fireEvent.click(screen.getByTestId('family-claude'));
-    const options = Array.from(screen.getByTestId('select-active-account').options).filter((o) => o.value !== '');
-    expect(options).toHaveLength(0);
+    expect(screen.queryByTestId('select-active-account')).toBeNull();
+    expect(screen.getByTestId('capacity-notice-zero')).toBeTruthy();
     expect(screen.getByTestId('no-compatible-accounts-alert')).toBeTruthy();
   });
 
@@ -1143,8 +1143,8 @@ describe('GroupManager - Homologación 2N (dual-familia por rol de cuota)', () =
     // Familia Gemini (puro por defecto): los 4 masters ya están en el pool agy → 0 candidatos
     fireEvent.click(screen.getByTestId('family-gemini'));
     await waitFor(() => {
-      const opts = Array.from(screen.getByTestId('select-active-account').options).filter((o) => o.value !== '');
-      expect(opts.length).toBe(0);
+      expect(screen.queryByTestId('select-active-account')).toBeNull();
+      expect(screen.getByTestId('capacity-notice-zero')).toBeTruthy();
     });
     expect(screen.getByTestId('no-compatible-accounts-alert')).toBeTruthy();
   });
