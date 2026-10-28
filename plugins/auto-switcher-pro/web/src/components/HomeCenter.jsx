@@ -642,8 +642,8 @@ export default function HomeCenter({ onNavigateTab, onOpenLicenseModal }) {
         <div className="home-kpi-card kpi-card-sponsor" data-testid="kpi-sponsor">
           <div className="kpi-header">
             <span className="kpi-title">☕ ¿Te salvó de un 429?</span>
-            <span className="kpi-status-badge badge-rose">
-              Valor Dev
+            <span className="kpi-status-badge badge-green">
+              100% Gratis
             </span>
           </div>
           <div className="kpi-sponsor-action">
