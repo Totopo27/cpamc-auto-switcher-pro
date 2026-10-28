@@ -11,6 +11,10 @@ import AuditLog from './components/AuditLog';
 import AgentMatrix from './components/AgentMatrix';
 import QuickGuideModal from './components/QuickGuideModal';
 import LicenseModal from './components/LicenseModal';
+import CommunityNoticeModal, {
+  STORAGE_KEY_SUPPORTER,
+  STORAGE_KEY_DISMISSED,
+} from './components/CommunityNoticeModal';
 import logoImg from './assets/auto-switcher-pro-logo.png';
 import { triggerCPAMCSidebarRefresh } from './utils/syncSidebar';
 import {
@@ -167,11 +171,28 @@ export default function App() {
   const [checkingForce, setCheckingForce] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isLicenseOpen, setIsLicenseOpen] = useState(false);
+  const [isNoticeOpen, setIsNoticeOpen] = useState(false);
   const [consoleToastVersion, setConsoleToastVersion] = useState(null);
   const [manualKeyInput, setManualKeyInput] = useState('');
   const [manualKeyError, setManualKeyError] = useState('');
   const consoleCheckExecutedRef = useRef(false);
   const graphRef = useRef(null);
+
+  // Apertura automática inteligente del Comunicado Especial si no es colaborador y no fue pospuesto hoy
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return;
+      const isSupporter = localStorage.getItem(STORAGE_KEY_SUPPORTER) === 'true';
+      if (isSupporter) return;
+
+      const dismissedUntil = localStorage.getItem(STORAGE_KEY_DISMISSED);
+      if (dismissedUntil && Number(dismissedUntil) > Date.now()) return;
+
+      setIsNoticeOpen(true);
+    } catch {
+      // Ignorar restricciones locales
+    }
+  }, []);
 
   // Escuchar cambios de hash en la barra de direcciones de CPAMC
   useEffect(() => {
@@ -840,6 +861,7 @@ export default function App() {
             <HomeCenter
               onNavigateTab={setActiveTab}
               onOpenLicenseModal={() => setIsLicenseOpen(true)}
+              onOpenNoticeModal={() => setIsNoticeOpen(true)}
             />
           </div>
         )}
@@ -1101,6 +1123,12 @@ export default function App() {
         <LicenseModal
           isOpen={isLicenseOpen}
           onClose={() => setIsLicenseOpen(false)}
+        />
+
+        {/* Modal de Comunicado Especial y Aporte Voluntario Comunitario */}
+        <CommunityNoticeModal
+          isOpen={isNoticeOpen}
+          onClose={() => setIsNoticeOpen(false)}
         />
       </main>
 

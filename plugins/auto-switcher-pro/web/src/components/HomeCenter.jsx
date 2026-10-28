@@ -12,7 +12,7 @@ import {
   fetchAgentMatrix,
 } from '../api/managementClient';
 
-export default function HomeCenter({ onNavigateTab, onOpenLicenseModal }) {
+export default function HomeCenter({ onNavigateTab, onOpenLicenseModal, onOpenNoticeModal }) {
   const [copied, setCopied] = useState(false);
   const [licenseData, setLicenseData] = useState({
     machine_id: 'CPA-...',
@@ -465,16 +465,15 @@ export default function HomeCenter({ onNavigateTab, onOpenLicenseModal }) {
                 Para que sigan existiendo más proyectos como este y podamos darles soporte continuo, novedades y parches al instante, invitar un café una sola vez ayuda muchísimo. ¡Muchas gracias!
               </p>
               <div className="action-card-footer">
-                <a
-                  href="https://www.paypal.com/donate/?hosted_button_id=WD6GVECN9GTJA"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={onOpenNoticeModal || onOpenLicenseModal}
                   className="btn-support-coffee"
                   data-testid="btn-support-coffee"
                   title="Invitar un café al creador de cpamc Auto Switcher Pro"
                 >
                   💖 Invitar un Café al Creador
-                </a>
+                </button>
               </div>
             </div>
           </div>
@@ -652,16 +651,15 @@ export default function HomeCenter({ onNavigateTab, onOpenLicenseModal }) {
             </span>
           </div>
           <div className="kpi-sponsor-action">
-            <a
-              href="https://www.paypal.com/donate/?hosted_button_id=WD6GVECN9GTJA"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
+              onClick={onOpenNoticeModal || onOpenLicenseModal}
               className="kpi-sponsor-button"
               data-testid="btn-home-sponsor"
               title="Donar un café al creador de cpamc Auto Switcher Pro"
             >
               💖 Invitar un Café al Creador
-            </a>
+            </button>
           </div>
           <div className="kpi-caption">
             Si este balanceador te ahorra bloqueos, cuida tus tokens y mantiene a tus agentes
