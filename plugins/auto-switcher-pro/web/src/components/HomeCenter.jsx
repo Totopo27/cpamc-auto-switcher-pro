@@ -421,126 +421,126 @@ export default function HomeCenter({ onNavigateTab, onOpenLicenseModal }) {
             data-testid="home-hero-logo"
           />
         </div>
-        <h1 className="home-hero-title">cpamc Auto Switcher Pro</h1>
+        <div className="home-hero-header-line">
+          <h1 className="home-hero-title">cpamc Auto Switcher Pro</h1>
+          <div className="home-system-cockpit-bar inline" data-testid="home-cockpit-bar">
+            <div className="cockpit-item cockpit-version">
+              <span className="cockpit-label">📦 Versión:</span>
+              <span className="cockpit-val text-white">{versionData.current_tag || `v${versionData.current_version}`}</span>
+              <span className="cockpit-badge badge-green" data-testid="badge-free-release">
+                ✓ 100% Gratuito
+              </span>
+              <span className={`cockpit-badge ${versionData.update_available ? 'badge-amber' : 'badge-green'}`}>
+                {versionData.update_available ? (
+                  <a
+                    href={versionData.releases_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cockpit-update-link"
+                  >
+                    ⚡ Actualizar a {versionData.latest_tag}
+                  </a>
+                ) : (
+                  '✓ Estable'
+                )}
+              </span>
+            </div>
+          </div>
+        </div>
+
         <p className="home-hero-subtitle">
           Motor inteligente de equilibrio de carga, alta disponibilidad y rotación automática para CLIProxyAPI
         </p>
 
-        {/* BARRA HORIZONTAL UNIFICADA: VERSIÓN, LICENCIA & HOST ID */}
-        <div className="home-system-cockpit-bar" data-testid="home-cockpit-bar">
-          {/* Bloque 1: Versión */}
-          <div className="cockpit-item cockpit-version">
-            <span className="cockpit-label">📦 Versión:</span>
-            <span className="cockpit-val text-white">{versionData.current_tag || `v${versionData.current_version}`}</span>
-            <span className={`cockpit-badge ${versionData.update_available ? 'badge-amber' : 'badge-green'}`}>
-              {versionData.update_available ? (
+        {/* FILA DE 2 COLUMNAS: APOYO AL PROYECTO LIBRE (CAFÉ) + TELEMETRÍA (DESACTIVABLE) */}
+        <div className="home-dual-action-grid" data-testid="home-dual-action-grid">
+          {/* Columna 1: Apoyo al Proyecto Libre (Café voluntario de 1 sola vez) */}
+          <div className="home-action-card home-card-support" data-testid="card-project-support">
+            <div className="action-card-header">
+              <span className="action-card-title">
+                <span style={{ marginRight: 6 }}>☕</span>
+                Apoyo al Proyecto Libre
+              </span>
+              <span className="action-card-badge badge-emerald">100% Gratuito</span>
+            </div>
+            <div className="action-card-body">
+              <p className="action-card-text">
+                Para que sigan existiendo más proyectos como este y podamos darles soporte continuo, novedades y parches al instante, invitar un café una sola vez ayuda muchísimo. ¡Muchas gracias!
+              </p>
+              <div className="action-card-footer">
                 <a
-                  href={versionData.releases_url}
+                  href="https://www.paypal.com/donate/?hosted_button_id=WD6GVECN9GTJA"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="cockpit-update-link"
+                  className="btn-support-coffee"
+                  data-testid="btn-support-coffee"
+                  title="Invitar un café al creador de cpamc Auto Switcher Pro"
                 >
-                  ⚡ Actualizar a {versionData.latest_tag}
+                  💖 Invitar un Café al Creador
                 </a>
-              ) : (
-                '✓ Estable'
-              )}
-            </span>
-          </div>
-
-          <span className="cockpit-divider">│</span>
-
-          {/* Bloque 2: Licencia */}
-          <div className="cockpit-item cockpit-license">
-            <span className="cockpit-label">⚡ Licencia:</span>
-            <span className="cockpit-val text-accent">
-              {licenseData.is_pro ? 'Pro Vitalicia' : 'Free Tier'}
-            </span>
-            {!licenseData.is_pro && (
-              <>
-                <span className="cockpit-bullet">·</span>
-                <button
-                  type="button"
-                  className="cockpit-btn cockpit-btn-pro"
-                  onClick={() => onOpenLicenseModal && onOpenLicenseModal()}
-                  data-testid="btn-home-open-license"
-                  title="Activar clave Pro para soporte prioritario"
-                >
-                  ⚡ Activar Pro
-                </button>
-              </>
-            )}
-          </div>
-
-          <span className="cockpit-divider">│</span>
-
-          {/* Bloque 3: Host ID */}
-          <div className="cockpit-item cockpit-host">
-            <span className="cockpit-label">💻 Host ID:</span>
-            <span className="cockpit-val mono text-highlight" title={machineId}>
-              {machineId}
-            </span>
-          </div>
-        </div>
-
-        {/* CAJA DE PREFERENCIA DE TELEMETRÍA Y OPTIMIZACIÓN CONTINUA */}
-        <div className="home-telemetry-box" data-testid="home-telemetry-box">
-          <div className="telemetry-box-header">
-            <label className="telemetry-toggle-label" htmlFor="chk-home-telemetry">
-              <input
-                type="checkbox"
-                id="chk-home-telemetry"
-                checked={telemetryEnabled}
-                onChange={handleToggleTelemetry}
-                data-testid="chk-home-telemetry"
-                className="telemetry-checkbox"
-              />
-              <span className="telemetry-title">
-                <Icons.Activity
-                  size={15}
-                  style={{
-                    marginRight: 6,
-                    verticalAlign: 'middle',
-                    color: telemetryEnabled ? '#10b981' : 'var(--text-tertiary, #9c958d)',
-                  }}
-                />
-                Telemetría de Cuotas & Optimización Continua
-              </span>
-            </label>
-            <span
-              className={`telemetry-status-pill ${telemetryEnabled ? 'active' : 'inactive'}`}
-              data-testid="telemetry-status-badge"
-            >
-              {telemetryEnabled ? '● Habilitada (Recomendado)' : '○ Deshabilitada'}
-            </span>
-          </div>
-
-          <div className="telemetry-box-body">
-            {telemetryEnabled ? (
-              <p className="telemetry-desc active" data-testid="telemetry-active-msg">
-                <strong style={{ color: '#10b981' }}>Te sugerimos mantenerla activa:</strong> Esta telemetría es 100% anónima y no recopila credenciales, prompts ni código fuente. Solo registra métricas de salud (latencias, consumo de cuota y ventana de 5h) para que el motor predictivo anticipe bloqueos 429, calibre las rotaciones y mejore continuamente tu experiencia y estabilidad de desarrollo.
-              </p>
-            ) : (
-              <div className="telemetry-desc inactive" data-testid="telemetry-inactive-msg">
-                <p style={{ margin: 0 }}>
-                  <strong style={{ color: '#f59e0b' }}>⚠️ Telemetría desactivada:</strong> El balanceador funcionará de forma puramente reactiva tras errores en caliente. Te invitamos a mantenerla activa para que el motor predictivo pueda proteger tus flujos antes de que se agote la cuota y optimizar el rendimiento sin compartir datos privados.
-                </p>
-                <button
-                  type="button"
-                  className="btn-re-enable-telemetry"
-                  onClick={() => {
-                    setTelemetryEnabled(true);
-                    if (typeof window !== 'undefined' && window.localStorage) {
-                      window.localStorage.setItem('telemetry_enabled', 'true');
-                    }
-                  }}
-                  data-testid="btn-re-enable-telemetry"
-                >
-                  <Icons.Zap size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
-                  Mantener activa para mejor experiencia
-                </button>
               </div>
-            )}
+            </div>
+          </div>
+
+          {/* Columna 2: Telemetría de Cuotas & Mejoras (Desactivable) */}
+          <div className="home-action-card home-card-telemetry" data-testid="home-telemetry-box">
+            <div className="action-card-header">
+              <label className="telemetry-toggle-label" htmlFor="chk-home-telemetry">
+                <input
+                  type="checkbox"
+                  id="chk-home-telemetry"
+                  checked={telemetryEnabled}
+                  onChange={handleToggleTelemetry}
+                  data-testid="chk-home-telemetry"
+                  className="telemetry-checkbox"
+                />
+                <span className="action-card-title">
+                  <Icons.Activity
+                    size={15}
+                    style={{
+                      marginRight: 6,
+                      verticalAlign: 'middle',
+                      color: telemetryEnabled ? '#10b981' : 'var(--text-tertiary, #9c958d)',
+                    }}
+                  />
+                  Telemetría (Desactivable)
+                </span>
+              </label>
+              <span
+                className={`telemetry-status-pill ${telemetryEnabled ? 'active' : 'inactive'}`}
+                data-testid="telemetry-status-badge"
+              >
+                {telemetryEnabled ? '● Habilitada (Recomendado)' : '○ Deshabilitada'}
+              </span>
+            </div>
+
+            <div className="action-card-body">
+              {telemetryEnabled ? (
+                <p className="action-card-text" data-testid="telemetry-active-msg">
+                  Apoyar con la telemetría ayuda a mejorar la experiencia y predecir caídas 429 sin cortes. Es 100% anónima (cero datos privados, prompts ni código). En caso de que prefieras deshabilitarla, puedes hacerlo desmarcando la casilla aquí mismo.
+                </p>
+              ) : (
+                <div className="action-card-text inactive" data-testid="telemetry-inactive-msg">
+                  <p style={{ margin: 0 }}>
+                    ⚠️ Telemetría desactivada: El balanceador funcionará de forma reactiva. Puedes reactivarla cuando desees para ayudar a mejorar la estabilidad de la herramienta.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn-re-enable-telemetry"
+                    onClick={() => {
+                      setTelemetryEnabled(true);
+                      if (typeof window !== 'undefined' && window.localStorage) {
+                        window.localStorage.setItem('telemetry_enabled', 'true');
+                      }
+                    }}
+                    data-testid="btn-re-enable-telemetry"
+                  >
+                    <Icons.Zap size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                    Reactivar telemetría
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

@@ -84,10 +84,13 @@ describe('HomeCenter Component - Portada Principal & Directorio de Menús', () =
     expect(screen.getByTestId('pillar-item-1')).toBeTruthy();
   });
 
-  it('renders dynamic unified cockpit bar (Version, License, Host ID) and 4 operational/sponsor KPIs', async () => {
+  it('renders dynamic simplified cockpit bar (Version and 100% Gratuito badge) and 4 operational/sponsor KPIs', async () => {
     render(<HomeCenter onNavigateTab={vi.fn()} />);
 
     expect(screen.getByTestId('home-cockpit-bar')).toBeTruthy();
+    expect(screen.getByTestId('badge-free-release')).toBeTruthy();
+    expect(screen.getByTestId('card-project-support')).toBeTruthy();
+    expect(screen.getByTestId('btn-support-coffee')).toBeTruthy();
     expect(screen.getByTestId('kpi-status')).toBeTruthy();
     expect(screen.getByTestId('kpi-sponsor')).toBeTruthy();
     expect(screen.getByTestId('btn-home-sponsor')).toBeTruthy();
@@ -95,36 +98,22 @@ describe('HomeCenter Component - Portada Principal & Directorio de Menús', () =
     expect(screen.getByTestId('kpi-telemetry')).toBeTruthy();
 
     await waitFor(() => {
-      expect(screen.getByText('CPA-TEST-1234-ABCD')).toBeDefined();
       expect(screen.getByText('v0.1.1')).toBeDefined();
+      expect(screen.getByText('✓ 100% Gratuito')).toBeDefined();
       expect(screen.getByText('✓ Estable')).toBeDefined();
-      expect(screen.getByText('Pro Vitalicia')).toBeDefined();
-      expect(screen.getByText(/☕ ¿Te salvó de un 429\?/i)).toBeDefined();
-      expect(screen.getByText(/💖 Invitar un Café al Creador/i)).toBeDefined();
+      expect(screen.getByText(/Apoyo al Proyecto Libre/i)).toBeDefined();
+      expect(screen.getAllByText(/💖 Invitar un Café al Creador/i).length).toBeGreaterThan(0);
       expect(screen.getAllByText('2 Pools').length).toBeGreaterThan(0);
       expect(screen.getAllByText('3 Eventos').length).toBeGreaterThan(0);
     });
   });
 
-  it('shows Free Tier and Activar Pro button when user does not have a Pro license', async () => {
-    vi.spyOn(managementClient, 'fetchLicenseStatus').mockResolvedValue({
-      ok: true,
-      status: 'trial',
-      tier: 'FREE',
-      machine_id: 'CPA-TRIAL-9999',
-      days_remaining: 30,
-    });
+  it('renders dual action grid with coffee support card and telemetry toggle card', async () => {
+    render(<HomeCenter onNavigateTab={vi.fn()} />);
 
-    const openModalMock = vi.fn();
-    render(<HomeCenter onNavigateTab={vi.fn()} onOpenLicenseModal={openModalMock} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Free Tier')).toBeDefined();
-      expect(screen.getByTestId('btn-home-open-license')).toBeDefined();
-    });
-
-    fireEvent.click(screen.getByTestId('btn-home-open-license'));
-    expect(openModalMock).toHaveBeenCalled();
+    expect(screen.getByTestId('home-dual-action-grid')).toBeTruthy();
+    expect(screen.getByText(/Para que sigan existiendo más proyectos como este/i)).toBeDefined();
+    expect(screen.getByText(/Telemetría \(Desactivable\)/i)).toBeDefined();
   });
 
   it('renders all menu cards and triggers onNavigateTab on click', () => {
@@ -161,7 +150,7 @@ describe('HomeCenter Component - Portada Principal & Directorio de Menús', () =
     const badge = screen.getByTestId('telemetry-status-badge');
     expect(badge.textContent).toContain('Habilitada (Recomendado)');
     expect(screen.getByTestId('telemetry-active-msg')).toBeTruthy();
-    expect(screen.getByText(/Te sugerimos mantenerla activa/i)).toBeTruthy();
+    expect(screen.getByText(/Apoyar con la telemetría ayuda a mejorar la experiencia/i)).toBeTruthy();
 
     // Toggle off: disables telemetry and shows friendly invitation
     fireEvent.click(chk);
@@ -178,6 +167,7 @@ describe('HomeCenter Component - Portada Principal & Directorio de Menús', () =
     expect(chk.checked).toBe(true);
     expect(window.localStorage.getItem('telemetry_enabled')).toBe('true');
     expect(screen.getByTestId('telemetry-active-msg')).toBeTruthy();
+    expect(screen.getByText(/Apoyar con la telemetría ayuda a mejorar la experiencia/i)).toBeTruthy();
   });
 
   it('respects pre-existing disabled telemetry setting in localStorage on load', () => {
