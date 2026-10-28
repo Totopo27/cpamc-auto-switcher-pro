@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import GroupManager from './GroupManager';
+import GroupManager, { getNodeProvider, getPoolProvider } from './GroupManager';
 import * as managementClient from '../api/managementClient';
 
 describe('GroupManager Component - Dedicated Full Screen Pool & Group Engine', () => {
@@ -1821,6 +1821,156 @@ describe('GroupManager - Homologación 2N (dual-familia por rol de cuota)', () =
       expect(titleEl.textContent).toContain('Anthropic Claude');
       expect(titleEl.textContent).toContain('OpenAI Codex');
       expect(titleEl.textContent).toContain('Otros');
+    });
+  });
+
+  describe('Provider Isolation & Agnostic Resolution Contract (getNodeProvider & getPoolProvider)', () => {
+    it('strictly classifies Codex accounts as codex even when filename or email contains @gmail.com', () => {
+      const codexNode = {
+        id: 'codex-ba780c88-infosoytec@gmail.com-plus.json',
+        data: {
+          fileName: 'codex-ba780c88-infosoytec@gmail.com-plus.json',
+          prefix: '',
+          provider: 'codex',
+          email: 'infosoytec@gmail.com',
+        },
+      };
+
+      expect(getNodeProvider(codexNode)).toBe('codex');
+    });
+
+    it('strictly classifies Claude accounts as claude and Antigravity accounts as antigravity', () => {
+      const claudeNode = {
+        id: 'claude-account.json',
+        data: {
+          fileName: 'claude-account.json',
+          prefix: '',
+          provider: 'claude',
+          email: 'claude.user@gmail.com',
+        },
+      };
+      const antigravityNode = {
+        id: 'antigravity-maribelluz.json',
+        data: {
+          fileName: 'antigravity-maribelluz.json',
+          prefix: 'agy',
+          provider: 'antigravity',
+          email: 'maribelluz@gmail.com',
+        },
+      };
+
+      expect(getNodeProvider(claudeNode)).toBe('claude');
+      expect(getNodeProvider(antigravityNode)).toBe('antigravity');
+    });
+
+    it('classifies NVIDIA NIM accounts correctly with prefix nim or nvidia-nim filename', () => {
+      const nimNode = {
+        id: 'nvidia-nim-107ccbf0ed71.json',
+        data: {
+          fileName: 'nvidia-nim-107ccbf0ed71.json',
+          prefix: 'nim',
+          provider: 'nvidia',
+          email: 'nvidia-account',
+        },
+      };
+
+      expect(getNodeProvider(nimNode)).toBe('nvidia');
+      expect(getPoolProvider({ basePrefix: 'nim' })).toBe('nvidia');
+    });
+
+    it('hides SUMAR NUEVA RESERVA AL POOL in Gemini pools when the only free account belongs to Codex', async () => {
+      vi.spyOn(managementClient, 'listPools').mockResolvedValue({
+        ok: true,
+        count: 1,
+        pools: [
+          {
+            id: 'Pool-01-gemini',
+            display_name: 'Pool-01-gemini',
+            base_prefix: 'agy',
+            family: 'gemini_pure',
+            leader_auth: 'antigravity-lead.json',
+            reserves: ['antigravity-res.json'],
+            members: ['antigravity-lead.json', 'antigravity-res.json'],
+            policy: { target_models: ['gemini-3.8-flash-high'] },
+          },
+        ],
+      });
+
+      const nodes = [
+        {
+          id: 'antigravity-lead.json',
+          data: { fileName: 'antigravity-lead.json', prefix: 'agy', provider: 'antigravity', email: 'lead@gmail.com' },
+        },
+        {
+          id: 'antigravity-res.json',
+          data: { fileName: 'antigravity-res.json', prefix: 'agy_1', provider: 'antigravity', email: 'res@gmail.com' },
+        },
+        {
+          id: 'codex-ba780c88-infosoytec@gmail.com-plus.json',
+          data: {
+            fileName: 'codex-ba780c88-infosoytec@gmail.com-plus.json',
+            prefix: '',
+            provider: 'codex',
+            email: 'infosoytec@gmail.com',
+          },
+        },
+      ];
+
+      render(<GroupManager nodes={nodes} />);
+
+      const tabDissolve = await screen.findByTestId('tab-disolver-pools');
+      fireEvent.click(tabDissolve);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('pool-card-agy')).toBeTruthy();
+      });
+
+      // Because the only free account is Codex, the Gemini pool MUST NOT show the reserve addition box
+      expect(screen.queryByTestId('card-adopt-section-agy')).toBeNull();
+      expect(screen.queryByTestId('select-card-adopt-agy')).toBeNull();
+    });
+
+    it('renders legacy nim pools as Pool-XX-nim with NVIDIA model instead of defaulting to gemini', async () => {
+      vi.spyOn(managementClient, 'listPools').mockResolvedValue({
+        ok: true,
+        count: 0,
+        pools: [],
+      });
+
+      const nodes = [
+        {
+          id: 'nvidia-nim-107ccbf0ed71.json',
+          data: {
+            fileName: 'nvidia-nim-107ccbf0ed71.json',
+            prefix: 'nim',
+            provider: 'nvidia',
+            email: 'nim-lead@nvidia.com',
+          },
+        },
+        {
+          id: 'nvidia-nim-292a6c8db7ea.json',
+          data: {
+            fileName: 'nvidia-nim-292a6c8db7ea.json',
+            prefix: 'nim_1',
+            provider: 'nvidia',
+            email: 'nim-res@nvidia.com',
+          },
+        },
+      ];
+
+      render(<GroupManager nodes={nodes} />);
+
+      const tabDissolve = await screen.findByTestId('tab-disolver-pools');
+      fireEvent.click(tabDissolve);
+
+      await waitFor(() => {
+        const poolCard = screen.getByTestId('pool-card-nim');
+        expect(poolCard).toBeTruthy();
+        expect(poolCard.textContent).toContain('Pool-01-nim');
+        expect(poolCard.textContent).not.toContain('Pool-01-gemini');
+        expect(poolCard.textContent).toContain('meta/llama-3.3-70b-instruct');
+        expect(poolCard.textContent).not.toContain('gemini-3.8-flash-high');
+      });
     });
   });
 });

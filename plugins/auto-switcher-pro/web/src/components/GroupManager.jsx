@@ -245,23 +245,26 @@ export function getNodeProvider(node) {
   const fn = (node.data?.fileName || node.name || node.id || '').toLowerCase().trim();
   const p = (node.data?.prefix || '').toLowerCase().trim();
 
-  if (prov === 'antigravity' || fn.startsWith('antigravity') || fn.includes('@gmail.com') || (node.data?.email && node.data.email.includes('@gmail.com'))) {
-    return 'antigravity';
+  // 1. Proveedores específicos con firma estricta en nombre de archivo, prefijo o tipo
+  if (prov === 'codex' || fn.startsWith('codex') || p.startsWith('codex')) {
+    return 'codex';
   }
   if (prov === 'claude' || fn.startsWith('claude') || fn.startsWith('clau-') || p.startsWith('clau')) {
     return 'claude';
   }
-  if (prov === 'codex' || fn.startsWith('codex') || p.startsWith('codex')) {
-    return 'codex';
+  if (prov === 'antigravity' || fn.startsWith('antigravity') || p.startsWith('agy') || (p.startsWith('g') && !p.startsWith('groq'))) {
+    return 'antigravity';
   }
 
+  // 2. OmniAuth Pro providers (nvidia/nim, nan, opencode, deepseek, groq, etc.)
   for (const [provKey, meta] of Object.entries(OMNIAUTH_PROVIDER_META)) {
     if (
       prov === provKey ||
       prov.includes(provKey) ||
       fn.startsWith(`${meta.hintPrefix}-`) ||
       fn.startsWith(`${provKey}-`) ||
-      p.startsWith(meta.hintPrefix)
+      p.startsWith(meta.hintPrefix) ||
+      (provKey === 'nvidia' && (p.startsWith('nim') || fn.startsWith('nim-') || fn.includes('nvidia-nim') || fn.includes('nim-') || p === 'nim'))
     ) {
       return provKey;
     }
@@ -286,6 +289,7 @@ export function getPoolProvider(pool) {
   if (bp.startsWith('agy') || bp.startsWith('g')) return 'antigravity';
   if (bp.startsWith('clau')) return 'claude';
   if (bp.startsWith('codex')) return 'codex';
+  if (bp === 'nim' || bp.startsWith('nim')) return 'nvidia';
   for (const [provKey, meta] of Object.entries(OMNIAUTH_PROVIDER_META)) {
     if (bp.startsWith(meta.hintPrefix)) return provKey;
   }
@@ -296,6 +300,7 @@ export function getPoolProvider(pool) {
     if (fam.startsWith('gemini')) return 'antigravity';
     if (fam === 'claude') return 'claude';
     if (fam === 'codex') return 'codex';
+    if (fam === 'nim' || fam === 'nvidia') return 'nvidia';
     if (OMNIAUTH_PROVIDER_META[fam]) return fam;
   }
 
@@ -446,6 +451,7 @@ export default function GroupManager({
     const members = new Set();
     registeredPools.forEach((pool) => {
       if (pool.leader_auth) members.add(pool.leader_auth);
+      if (Array.isArray(pool.members)) pool.members.forEach((auth) => members.add(auth));
       (Array.isArray(pool.reserves) ? pool.reserves : []).forEach((auth) => members.add(auth));
     });
     return members;
@@ -942,8 +948,6 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
       }
 
       const activeLeaderAuth = pool.active_leader || pool.leader_auth || '';
-      const targetModel =
-        (Array.isArray(pool.policy?.target_models) && pool.policy.target_models[0]) || 'gemini-3.8-flash-high';
       const extractedNum = extractPoolNumber(pool);
       const poolIndex = extractedNum < 999999 ? extractedNum : (poolsMap.size + 1);
       const famStr = (pool.family || basePrefix || '').toLowerCase();
@@ -953,6 +957,8 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
         famSuffix = 'codex';
       } else if (famStr.includes('clau') || famStr.includes('son') || famStr.includes('opus') || bpLower.startsWith('clau')) {
         famSuffix = 'claude';
+      } else if (famStr.includes('nim') || bpLower.startsWith('nim')) {
+        famSuffix = 'nim';
       } else {
         // Buscar si coincide con proveedores de OmniAuth Pro (nim, nan, etc.)
         for (const [provKey, meta] of Object.entries(OMNIAUTH_PROVIDER_META)) {
@@ -970,6 +976,15 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
           : canonicalPoolName;
       const enabled = pool.enabled !== false;
       const memberModels = pool.member_models || {};
+
+      let defaultRegisteredTargetModel = 'gemini-3.8-flash-high';
+      if (famSuffix === 'claude') defaultRegisteredTargetModel = 'claude-sonnet-4-6';
+      else if (famSuffix === 'codex') defaultRegisteredTargetModel = 'gpt-4o';
+      else if (famSuffix === 'nim' || famSuffix === 'nvidia') defaultRegisteredTargetModel = OMNIAUTH_PROVIDER_META.nvidia?.models?.[0] || 'meta/llama-3.3-70b-instruct';
+      else if (OMNIAUTH_PROVIDER_META[famSuffix]?.models?.[0]) defaultRegisteredTargetModel = OMNIAUTH_PROVIDER_META[famSuffix].models[0];
+
+      const targetModel =
+        (Array.isArray(pool.policy?.target_models) && pool.policy.target_models[0]) || defaultRegisteredTargetModel;
 
       poolsMap.set(basePrefix, {
         id: poolId,
@@ -1004,20 +1019,34 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
       if (!poolsMap.has(baseKey)) {
         const poolIndex = poolsMap.size + 1;
         const bkLower = baseKey.toLowerCase();
+        const nodeProv = getNodeProvider(node);
         let famSuffix = 'gemini';
-        if (bkLower.includes('codex') || bkLower.startsWith('codex')) {
+        if (bkLower.includes('codex') || bkLower.startsWith('codex') || nodeProv === 'codex') {
           famSuffix = 'codex';
-        } else if (bkLower.includes('clau') || bkLower.includes('son') || bkLower.includes('opus') || bkLower.startsWith('clau')) {
+        } else if (bkLower.includes('clau') || bkLower.includes('son') || bkLower.includes('opus') || bkLower.startsWith('clau') || nodeProv === 'claude') {
           famSuffix = 'claude';
+        } else if (bkLower === 'nim' || bkLower.startsWith('nim') || nodeProv === 'nvidia') {
+          famSuffix = 'nim';
         } else {
           for (const [provKey, meta] of Object.entries(OMNIAUTH_PROVIDER_META)) {
-            if (bkLower.startsWith(meta.hintPrefix)) {
+            if (bkLower.startsWith(meta.hintPrefix) || nodeProv === provKey) {
               famSuffix = provKey;
               break;
             }
           }
         }
         const canonicalPoolName = `Pool-${String(poolIndex).padStart(2, '0')}-${famSuffix}`;
+        let defaultLegacyTargetModel = 'gemini-3.8-flash-high';
+        if (famSuffix === 'claude') {
+          defaultLegacyTargetModel = 'claude-sonnet-4-6';
+        } else if (famSuffix === 'codex') {
+          defaultLegacyTargetModel = 'gpt-4o';
+        } else if (famSuffix === 'nim' || famSuffix === 'nvidia') {
+          defaultLegacyTargetModel = OMNIAUTH_PROVIDER_META.nvidia?.models?.[0] || 'meta/llama-3.3-70b-instruct';
+        } else if (OMNIAUTH_PROVIDER_META[famSuffix]?.models?.[0]) {
+          defaultLegacyTargetModel = OMNIAUTH_PROVIDER_META[famSuffix].models[0];
+        }
+
         poolsMap.set(baseKey, {
           id: canonicalPoolName,
           displayName: canonicalPoolName,
@@ -1025,7 +1054,7 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
           basePrefix: baseKey,
           root: null,
           reserves: [],
-          targetModel: famSuffix === 'claude' ? 'claude-sonnet-4-6' : famSuffix === 'codex' ? 'gpt-4o' : 'gemini-3.8-flash-high',
+          targetModel: defaultLegacyTargetModel,
           memberModels: {},
         });
       }
@@ -2682,11 +2711,18 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
             </div>
           ) : (
             existingPools.map((pool, poolIdx) => {
-              const poolCleanName = pool.displayName || `Pool-${String(poolIdx + 1).padStart(2, '0')}-gemini`;
-              const leaderFile = pool.root?.data?.fileName || pool.root?.name || pool.root?.id || '';
-              const leaderModel = (pool.memberModels && pool.memberModels[leaderFile]) || pool.targetModel || 'gemini-3.8-flash-high';
-              const leaderPref = pool.root?.data?.prefix || pool.basePrefix;
               const poolProv = getPoolProvider(pool);
+              const poolCleanName = pool.displayName || `Pool-${String(poolIdx + 1).padStart(2, '0')}-${poolProv || 'pool'}`;
+              const defaultModel = poolProv === 'claude'
+                ? 'claude-sonnet-4-6'
+                : poolProv === 'codex'
+                ? 'gpt-4o'
+                : poolProv === 'nvidia' || poolProv === 'nim'
+                ? 'meta/llama-3.3-70b-instruct'
+                : 'gemini-3.8-flash-high';
+              const leaderFile = pool.root?.data?.fileName || pool.root?.name || pool.root?.id || '';
+              const leaderModel = (pool.memberModels && pool.memberModels[leaderFile]) || pool.targetModel || defaultModel;
+              const leaderPref = pool.root?.data?.prefix || pool.basePrefix;
               const compatibleFreeNodes = freeNodes.filter((fn) => getNodeProvider(fn) === poolProv);
 
               return (
@@ -2715,7 +2751,7 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
                       }}
                       title="Modelo Especialista Predeterminado del Pool"
                     >
-                      ⚙️ {pool.targetModel || 'gemini-3.8-flash-high'}
+                      ⚙️ {pool.targetModel || defaultModel}
                     </span>
                     <span style={{ fontSize: 11, background: 'rgba(168, 85, 247, 0.2)', color: '#d8b4fe', padding: '2px 8px', borderRadius: 4, fontWeight: 700 }}>
                       {(pool.root ? 1 : 0) + pool.reserves.length} cuentas
@@ -2792,7 +2828,7 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
                   )}
                   {pool.reserves.map(({ node, prefix }, rIdx) => {
                     const rFile = node.data?.fileName || node.name || node.id || '';
-                    const rModel = (pool.memberModels && pool.memberModels[rFile]) || pool.targetModel || 'gemini-3.8-flash-high';
+                    const rModel = (pool.memberModels && pool.memberModels[rFile]) || pool.targetModel || defaultModel;
                     const numBadge = rIdx === 0 ? '2️⃣' : rIdx === 1 ? '3️⃣' : `${rIdx + 2}️⃣`;
                     return (
                     <div key={node.id} className="group-pool-member-row">
@@ -2940,10 +2976,10 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
                               alignItems: 'center',
                               gap: 6,
                             }}
-                            title={`Hereda automáticamente ${pool.targetModel || 'gemini-3.8-flash-high'}`}
+                            title={`Hereda automáticamente ${pool.targetModel || defaultModel}`}
                           >
                             <span>🔒</span>
-                            <span>{pool.targetModel || 'gemini-3.8-flash-high'} ⭐</span>
+                            <span>{pool.targetModel || defaultModel} ⭐</span>
                           </div>
                         </div>
                       </div>
