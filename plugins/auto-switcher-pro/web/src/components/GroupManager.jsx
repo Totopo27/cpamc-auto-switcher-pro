@@ -16,6 +16,10 @@ import {
   getAuthFileModels,
 } from '../api/managementClient';
 import '../GroupManager.css';
+import CommunityNoticeModal, {
+  STORAGE_KEY_SUPPORTER,
+  STORAGE_KEY_DISMISSED,
+} from './CommunityNoticeModal';
 
 // Rol de cuota de un pool del registro (coherente con targetFamilyRole / buildManagedPoolCards):
 // gemini_pure → 'gemini'; gemini_sonnet/gemini_opus/gemini_claude/claude → 'claude'; codex → 'codex'
@@ -358,6 +362,8 @@ export default function GroupManager({
   const [saveReport, setSaveReport] = useState(null); // { base, successful, failed }
   const [modelRoutes, setModelRoutes] = useState(null); // { base, routes: [] }
   const [copiedRoute, setCopiedRoute] = useState('');
+  const [isNoticeOpen, setIsNoticeOpen] = useState(false);
+  const pendingCreationRef = useRef(false);
   // [registeredPools] Pools registrados en el plugin PoolRegistry (fuente única de verdad).
   // Se resincroniza en cada reload de nodos (tras crear/disolver un pool).
   const [registeredPools, setRegisteredPools] = useState([]);
@@ -1527,6 +1533,50 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
     }
   }, [groupBasePrefix, selectedActiveNodeId, selectedReserveNodeIds, nodes, onReloadRequested, effectiveFamily, excludeVersion55, selectedSpecialistModel, isVirtualSource, registryMemberFileNames, registryMembersByRole]);
 
+  // Valida y lanza el modal comunitario si corresponde o ejecuta directamente el guardado
+  const handleInitiateCreateGroup = useCallback(() => {
+    const trimmedBase = groupBasePrefix.trim();
+    if (!trimmedBase) {
+      setErrorMessage('El prefijo base del pool no puede estar vacío.');
+      return;
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmedBase)) {
+      setErrorMessage('El prefijo solo puede contener letras, números, guiones y guiones bajos.');
+      return;
+    }
+    if (!selectedActiveNodeId) {
+      setErrorMessage('Debes seleccionar una cuenta Principal (Activa / Root).');
+      return;
+    }
+    if (selectedReserveNodeIds.length === 0) {
+      setErrorMessage('Mínimo 2 cuentas requeridas por grupo: debes seleccionar al menos 1 cuenta de reserva.');
+      return;
+    }
+
+    try {
+      const isSupporter = typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEY_SUPPORTER) === 'true';
+      const dismissedUntil = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_DISMISSED) : null;
+      const isDismissedToday = dismissedUntil && Number(dismissedUntil) > Date.now();
+
+      if (!isSupporter && !isDismissedToday) {
+        pendingCreationRef.current = true;
+        setIsNoticeOpen(true);
+        return;
+      }
+    } catch {}
+
+    // Si es supporter o pospuso hoy, guarda directamente
+    handleCreateGroup();
+  }, [groupBasePrefix, selectedActiveNodeId, selectedReserveNodeIds, handleCreateGroup]);
+
+  const handleNoticeCloseAndContinue = useCallback(() => {
+    setIsNoticeOpen(false);
+    if (pendingCreationRef.current) {
+      pendingCreationRef.current = false;
+      handleCreateGroup();
+    }
+  }, [handleCreateGroup]);
+
   // Reintentar solo las cuentas que fallaron en el último guardado
   const handleRetryFailed = useCallback(async () => {
     if (!saveReport || saveReport.failed.length === 0) return;
@@ -2547,7 +2597,7 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
                       !groupBasePrefix.trim() ||
                       !!familyMismatch
                     }
-                    onClick={handleCreateGroup}
+                    onClick={handleInitiateCreateGroup}
                     data-testid="btn-save-group"
                     style={{
                       padding: '10px 20px',
@@ -3055,6 +3105,12 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
           )}
         </div>
       )}
+
+      {/* Modal de Comunicado Especial y Aporte Voluntario Comunitario al Crear Pool */}
+      <CommunityNoticeModal
+        isOpen={isNoticeOpen}
+        onClose={handleNoticeCloseAndContinue}
+      />
     </div>
   );
 }

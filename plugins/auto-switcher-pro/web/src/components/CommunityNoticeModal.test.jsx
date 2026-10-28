@@ -10,26 +10,27 @@ import CommunityNoticeModal, {
   BINANCE_USER_ID,
 } from './CommunityNoticeModal';
 
-describe('CommunityNoticeModal Component - 2 Columnas 1ª vez & Telemetría en Inicio', () => {
+describe('CommunityNoticeModal Component - 1 Columna Vertical con Telemetría previa única', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
   });
 
-  it('renders in 2 columns on first run and displays telemetry info', () => {
+  it('renders in vertical layout on first run and displays horizontal telemetry banner', () => {
     render(<CommunityNoticeModal isOpen={true} onClose={vi.fn()} />);
 
     expect(screen.getByTestId('col-support')).toBeTruthy();
     expect(screen.getByTestId('col-telemetry')).toBeTruthy();
-    expect(screen.getByTestId('telemetry-once-note').textContent).toContain(
-      'Este panel de telemetría solo te aparecerá esta primera vez aquí'
-    );
+    expect(screen.getByTestId('btn-cta-paypal').textContent).toContain('☕ Invitar un Café y Desbloquear Sorpresas Dev →');
     expect(screen.getByTestId('notice-wiloxdev-quote').textContent).toContain(
-      '«Creado con esmero por WiloxDev como un aporte libre para la comunidad: una herramienta nacida para resolver necesidades reales de alta concurrencia. ❤️»'
+      '¡Invita un café hoy y llévate sorpresas en utilidades exclusivas!'
     );
+    expect(screen.getByTestId('notice-wiloxdev-quote').textContent).toContain('omniauth-pro');
+    expect(screen.getByTestId('notice-wiloxdev-quote').textContent).toContain('discord-pi');
+    expect(screen.getByTestId('notice-wiloxdev-quote').textContent).toContain('scanner-working-chat');
   });
 
-  it('renders single column if telemetry was already shown once', () => {
+  it('hides telemetry banner if telemetry was already shown once', () => {
     localStorage.setItem(STORAGE_KEY_TELEMETRY_ONCE_SHOWN, 'true');
     render(<CommunityNoticeModal isOpen={true} onClose={vi.fn()} />);
 
@@ -37,7 +38,7 @@ describe('CommunityNoticeModal Component - 2 Columnas 1ª vez & Telemetría en I
     expect(screen.queryByTestId('col-telemetry')).toBeNull();
   });
 
-  it('allows toggling telemetry and toggling payload preview', () => {
+  it('allows toggling telemetry', () => {
     const onTelemetryChangeMock = vi.fn();
     render(
       <CommunityNoticeModal
@@ -55,11 +56,6 @@ describe('CommunityNoticeModal Component - 2 Columnas 1ª vez & Telemetría en I
     expect(chkTelemetry.checked).toBe(false);
     expect(localStorage.getItem(STORAGE_KEY_TELEMETRY_ENABLED)).toBe('false');
     expect(onTelemetryChangeMock).toHaveBeenCalledWith(false);
-
-    // Desplegar visor de carga JSON
-    expect(screen.queryByTestId('telemetry-payload-box')).toBeNull();
-    fireEvent.click(screen.getByTestId('btn-toggle-payload'));
-    expect(screen.getByTestId('telemetry-payload-box')).toBeTruthy();
   });
 
   it('marks telemetry once shown upon clicking free action button', () => {

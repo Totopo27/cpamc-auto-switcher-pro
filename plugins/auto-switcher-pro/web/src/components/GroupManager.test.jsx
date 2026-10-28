@@ -2,11 +2,18 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import GroupManager, { getNodeProvider, getPoolProvider } from './GroupManager';
+import {
+  STORAGE_KEY_SUPPORTER,
+  STORAGE_KEY_DISMISSED,
+} from './CommunityNoticeModal';
 import * as managementClient from '../api/managementClient';
 
 describe('GroupManager Component - Dedicated Full Screen Pool & Group Engine', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    localStorage.clear();
+    // En pruebas unitarias estándar marcamos supporter para evaluar guardado directo salvo en tests específicos de modal
+    localStorage.setItem(STORAGE_KEY_SUPPORTER, 'true');
   });
 
   const mockFullyAssignedNodes = [
@@ -1970,6 +1977,43 @@ describe('GroupManager - Homologación 2N (dual-familia por rol de cuota)', () =
         expect(poolCard.textContent).not.toContain('Pool-01-gemini');
         expect(poolCard.textContent).toContain('meta/llama-3.3-70b-instruct');
         expect(poolCard.textContent).not.toContain('gemini-3.8-flash-high');
+      });
+    });
+
+    it('intercepts Armar y Guardar Pool with CommunityNoticeModal when not supporter and saves upon continuing', async () => {
+      localStorage.clear(); // Limpiar supporter status
+      const dynNodes = [
+        { id: 'free1', data: { fileName: 'free1.json', email: 'free1@test.com', prefix: '', provider: 'antigravity' } },
+        { id: 'free2', data: { fileName: 'free2.json', email: 'free2@test.com', prefix: '', provider: 'antigravity' } },
+      ];
+
+      const patchSpy = vi.spyOn(managementClient, 'saveAuthFilePrefixes').mockResolvedValue({
+        successful: [{ name: 'free1.json', prefix: 'g1' }, { name: 'free2.json', prefix: 'g1_1' }],
+        failed: [],
+      });
+
+      render(<GroupManager nodes={dynNodes} />);
+
+      fireEvent.click(screen.getByTestId('family-gemini'));
+      fireEvent.change(screen.getByTestId('input-group-base-prefix'), { target: { value: 'g1' } });
+      fireEvent.change(screen.getByTestId('select-active-account'), { target: { value: 'free1' } });
+      fireEvent.click(screen.getByTestId('reserve-item-free2'));
+
+      // Clic en Guardar: no debe guardar de inmediato sino abrir el modal
+      fireEvent.click(screen.getByTestId('btn-save-group'));
+
+      const modal = await screen.findByTestId('community-notice-modal');
+      expect(modal).toBeTruthy();
+      expect(patchSpy).not.toHaveBeenCalled();
+
+      // Clic en continuar gratis: se cierra el modal y se ejecuta el guardado del pool
+      fireEvent.click(screen.getByTestId('btn-free-action'));
+
+      await waitFor(() => {
+        expect(patchSpy).toHaveBeenCalledWith([
+          { name: 'free1.json', prefix: 'g1' },
+          { name: 'free2.json', prefix: 'g1_1' },
+        ]);
       });
     });
   });

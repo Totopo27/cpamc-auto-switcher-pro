@@ -178,20 +178,9 @@ export default function App() {
   const consoleCheckExecutedRef = useRef(false);
   const graphRef = useRef(null);
 
-  // Apertura automática inteligente del Comunicado Especial si no es colaborador y no fue pospuesto hoy
+  // Apertura del Comunicado Especial: Se gestiona en el momento oportuno (ej. Crear Pool en GroupManager)
   useEffect(() => {
-    try {
-      if (typeof window === 'undefined') return;
-      const isSupporter = localStorage.getItem(STORAGE_KEY_SUPPORTER) === 'true';
-      if (isSupporter) return;
-
-      const dismissedUntil = localStorage.getItem(STORAGE_KEY_DISMISSED);
-      if (dismissedUntil && Number(dismissedUntil) > Date.now()) return;
-
-      setIsNoticeOpen(true);
-    } catch {
-      // Ignorar restricciones locales
-    }
+    // Intencionalmente no abre en el boot global para no interrumpir la navegación inicial
   }, []);
 
   // Escuchar cambios de hash en la barra de direcciones de CPAMC

@@ -150,12 +150,12 @@ export default function CommunityNoticeModal({
           </div>
         ) : (
           <>
-            {/* GRID PRINCIPAL: 2 COLUMNAS LA 1ª VEZ, 1 COLUMNA DESPUÉS */}
+            {/* CONTENEDOR PRINCIPAL VERTICAL DE 1 COLUMNA COMPACTA */}
             <div
-              className={`notice-grid-layout ${!isFirstTelemetryInfo ? 'single-column' : ''}`}
+              className="notice-vertical-container"
               data-testid="notice-grid-layout"
             >
-              {/* COLUMNA 1: APORTE LIBRE (CAFÉ) */}
+              {/* CAJA PRINCIPAL: APORTE LIBRE (CAFÉ) */}
               <div className="notice-col-support" data-testid="col-support">
                 <div>
                   <div className="notice-col-support-text">
@@ -243,7 +243,7 @@ export default function CommunityNoticeModal({
                     onClick={handleRegisterSupporter}
                     data-testid="btn-cta-paypal"
                   >
-                    Abrir PayPal para Aporte Libre →
+                    ☕ Invitar un Café y Desbloquear Sorpresas Dev →
                   </a>
                 ) : (
                   <button
@@ -255,76 +255,41 @@ export default function CommunityNoticeModal({
                     }}
                     data-testid="btn-cta-binance"
                   >
-                    Copiar ID y Donar por Binance →
+                    ☕ Invitar con Binance y Desbloquear Sorpresas Dev →
                   </button>
                 )}
               </div>
 
-              {/* COLUMNA 2: PREFERENCIAS DE TELEMETRÍA (Solo sale 1 vez para informar) */}
+              {/* BLOQUE DE TELEMETRÍA HORIZONTAL EN 1 SOLA FILA (Solo 1ª vez) */}
               {isFirstTelemetryInfo && (
-                <div className="notice-col-telemetry" data-testid="col-telemetry">
-                  <div>
-                    {/* Header con checkbox de telemetría */}
-                    <div className="telemetry-card-header">
-                      <label className="telemetry-label-row" htmlFor="chk-notice-telemetry">
-                        <input
-                          type="checkbox"
-                          id="chk-notice-telemetry"
-                          checked={telemetryActive}
-                          onChange={handleToggleTelemetry}
-                          data-testid="chk-telemetry-toggle"
-                        />
-                        <span>
-                          <span style={{ marginRight: 6 }}>📈</span>
-                          Telemetría <span className="telemetry-subtag">(Desactivable)</span>
-                        </span>
-                      </label>
-                      <span
-                        className={`telemetry-pill-active ${telemetryActive ? 'active' : 'inactive'}`}
-                        data-testid="telemetry-pill-status"
-                      >
-                        {telemetryActive ? '● Habilitada (Recomendado)' : '○ Deshabilitada'}
+                <div className="notice-telemetry-banner" data-testid="col-telemetry">
+                  <div className="telemetry-card-header">
+                    <label className="telemetry-label-row" htmlFor="chk-notice-telemetry">
+                      <input
+                        type="checkbox"
+                        id="chk-notice-telemetry"
+                        checked={telemetryActive}
+                        onChange={handleToggleTelemetry}
+                        data-testid="chk-telemetry-toggle"
+                      />
+                      <span>
+                        <span style={{ marginRight: 6 }}>📈</span>
+                        Telemetría <span className="telemetry-subtag">(Desactivable)</span>
                       </span>
-                    </div>
-
-                    {/* Texto informativo de tu captura */}
-                    <div className="telemetry-body-text">
-                      Apoyar con la telemetría ayuda a mejorar la experiencia y predecir caídas{' '}
-                      <span className="badge-429-pill">429</span> sin cortes. Es 100% anónima (cero datos
-                      privados, prompts ni código). En caso de que prefieras deshabilitarla, puedes hacerlo
-                      desmarcando la casilla aquí mismo.
-                    </div>
+                    </label>
+                    <span
+                      className={`telemetry-pill-active ${telemetryActive ? 'active' : 'inactive'}`}
+                      data-testid="telemetry-pill-status"
+                    >
+                      {telemetryActive ? '● Habilitada (Recomendado)' : '○ Deshabilitada'}
+                    </span>
                   </div>
 
-                  <div>
-                    {/* Fila de transparencia y auditoría */}
-                    <div className="telemetry-transparency-row">
-                      <span className="telemetry-audit-badge">
-                        <span>🛡️</span> Auditable y privada
-                      </span>
-                      <button
-                        type="button"
-                        className="btn-toggle-payload"
-                        onClick={() => setShowPayload(!showPayload)}
-                        data-testid="btn-toggle-payload"
-                      >
-                        {showPayload ? 'Ocultar carga ▴' : 'Ver carga de telemetría ⌵'}
-                      </button>
-                    </div>
-
-                    {/* Visor JSON expandible */}
-                    {showPayload && (
-                      <div className="telemetry-payload-box" data-testid="telemetry-payload-box">
-                        <pre>{JSON.stringify(SAMPLE_TELEMETRY_PAYLOAD, null, 2)}</pre>
-                      </div>
-                    )}
-
-                    {/* Nota informativa: Solo sale esta vez y luego se gestiona en Inicio */}
-                    <div className="telemetry-notice-once-pill" data-testid="telemetry-once-note">
-                      💡 <strong>Aviso informativo único:</strong> Este panel de telemetría solo te aparecerá esta
-                      primera vez aquí. En cualquier momento podrás cambiarlo o deshabilitarlo desde la pestaña{' '}
-                      <strong>Inicio & Resumen</strong>.
-                    </div>
+                  <div className="telemetry-body-text">
+                    Apoyar con la telemetría ayuda a mejorar la experiencia y predecir caídas{' '}
+                    <span className="badge-429-pill">429</span> sin cortes. Es 100% anónima (cero datos
+                    privados, prompts ni código). En caso de que prefieras deshabilitarla, puedes hacerlo
+                    desmarcando la casilla aquí mismo.
                   </div>
                 </div>
               )}
@@ -369,10 +334,9 @@ export default function CommunityNoticeModal({
         {/* Divisor inferior */}
         <div className="notice-footer-divider"></div>
 
-        {/* Frase oficial WiloxDev */}
+        {/* Frase oficial WiloxDev afinada con proyectos clave */}
         <p className="notice-wiloxdev-quote" data-testid="notice-wiloxdev-quote">
-          «Creado con esmero por <strong>WiloxDev</strong> como un aporte libre para la comunidad: una
-          herramienta nacida para resolver necesidades reales de alta concurrencia. ❤️»
+          🎁 «¡Invita un café hoy y llévate sorpresas en utilidades exclusivas! Acceso a proyectos de plugins y extensiones de <strong>WiloxDev</strong> como: <em>omniauth-pro</em>, <em>scanner-working-chat</em>, <em>discord-pi</em>, <em>Wellness-Reloj-pi</em>, <em>center-control-manager</em> y más. Con tu café me motivas a seguir creando y liberando más proyectos como este. ☕❤️»
         </p>
       </div>
     </div>
