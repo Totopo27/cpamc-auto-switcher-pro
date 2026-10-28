@@ -604,14 +604,19 @@ export default function HomeCenter({ onNavigateTab, onOpenLicenseModal }) {
           <div className="anatomy-box-footer">
             <button
               type="button"
-              className="anatomy-toggle-button"
+              className={`anatomy-toggle-button ${!showAllPillars ? 'cta-breathing' : ''}`}
               onClick={() => setShowAllPillars((prev) => !prev)}
               data-testid="btn-toggle-all-pillars"
             >
               {showAllPillars ? (
-                <>▲ Plegar a vista Top Estrella</>
+                <>▲ Plegar detalles del plugin</>
               ) : (
-                <>⚡ Ver arquitectura completa (13 Pilares · 42 Capacidades en detalle)... ▼</>
+                <>
+                  <span className="anatomy-cta-gradient">
+                    ⚡ Haz clic aquí para ver todo lo que hace el plugin (13 Pilares · 42 Capacidades)
+                  </span>
+                  <span className="anatomy-cta-arrow">▼</span>
+                </>
               )}
             </button>
           </div>

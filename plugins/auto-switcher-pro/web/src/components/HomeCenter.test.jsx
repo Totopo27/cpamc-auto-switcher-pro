@@ -70,13 +70,13 @@ describe('HomeCenter Component - Portada Principal & Directorio de Menús', () =
 
     // Botón de expansión
     const toggleBtn = screen.getByTestId('btn-toggle-all-pillars');
-    expect(toggleBtn.textContent).toContain('Ver arquitectura completa');
+    expect(toggleBtn.textContent).toContain('Haz clic aquí para ver todo lo que hace el plugin');
 
     // Clic para desplegar todos los 13 pilares
     fireEvent.click(toggleBtn);
     expect(screen.getByTestId('pillar-item-2')).toBeTruthy();
     expect(screen.getByTestId('pillar-item-13')).toBeTruthy();
-    expect(toggleBtn.textContent).toContain('Plegar a vista Top Estrella');
+    expect(toggleBtn.textContent).toContain('Plegar detalles del plugin');
 
     // Clic para plegar de nuevo a la vista Top Estrella
     fireEvent.click(toggleBtn);
