@@ -167,13 +167,17 @@ describe("Adapter Footer Formatting & Origin Indicator", () => {
 	});
 
 	it("renders sidebar card in intercepted runaway loop state", () => {
-		const alertTelemetry = {
+		const alertTelemetry: any = {
 			bashExplorationCount: 5,
 			subagentPollCount: 1,
 			blockedIntrospections: 1,
 			blockedBashEvasions: 1,
 			blockedSubagentPolls: 0,
 			lastBlockedReason: "Evasión por bash bloqueada",
+			totalToolCount: 6,
+			circuitBreakerTripped: false,
+			tokensSavedEstimate: 0,
+			blockedProhibitedCommands: 0,
 		};
 		const lines = formatSidebarQuotaCardLines(mockPoolPair, 48, undefined, undefined, false, alertTelemetry);
 		const text = lines.map((l: string) => stripAnsi(l)).join("\n");
@@ -314,7 +318,7 @@ describe("Adapter Footer Formatting & Origin Indicator", () => {
 		assert.match(fullText1, /DISYUNTOR|CUIDANDO EL CHAT/);
 
 		// 3. Gentle-Shell triggers an event (resize, git check, etc.) and overwrites footer with a new rail
-		const reRegisteredFooter = {
+		const reRegisteredFooter: any = {
 			render: () => ["╭─ Status v2 ─╮", "│ Git: clean  │", "╰─────────────╯"],
 			digest: () => "status_v2",
 		};

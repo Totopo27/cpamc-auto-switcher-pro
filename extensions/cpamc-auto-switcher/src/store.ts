@@ -396,12 +396,6 @@ export async function querySwitcherAccounts(force = false): Promise<SwitcherAcco
 			}
 		}
 
-		if (list.length > 0) {
-			cachedAccounts = list;
-			lastFetchTime = Date.now();
-			return cachedAccounts;
-		}
-
 		// Si la API no respondió o vino vacía, intentar fallback a través de getStoredPools() en auto-switcher-pro-state.json
 		throw new Error("Empty API response");
 	} catch {

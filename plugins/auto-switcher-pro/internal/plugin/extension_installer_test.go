@@ -77,4 +77,41 @@ func TestExtensionEndpoints(t *testing.T) {
 			t.Errorf("expected cpamc-auto-switcher in script")
 		}
 	})
+
+	t.Run("GET /auto-switcher-pro/pair", func(t *testing.T) {
+		req := ManagementRequestPayload{
+			Method: http.MethodGet,
+			Path:   "/auto-switcher-pro/pair",
+			Headers: map[string][]string{
+				"Host": {"192.168.10.150:8317"},
+			},
+		}
+		rawReq, _ := json.Marshal(req)
+		out, err := HandleManagementHTTP(rawReq)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var env Envelope
+		if err := json.Unmarshal(out, &env); err != nil {
+			t.Fatalf("failed to unmarshal envelope: %v", err)
+		}
+
+		var resp ManagementResponsePayload
+		if err := json.Unmarshal(env.Result, &resp); err != nil {
+			t.Fatalf("failed to unmarshal resp: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected 200, got %d", resp.StatusCode)
+		}
+
+		scriptBytes, _ := base64.StdEncoding.DecodeString(resp.Body)
+		script := string(scriptBytes)
+		if !strings.Contains(script, "http://192.168.10.150:8317") {
+			t.Errorf("expected script to contain dynamic host url, got %s", script)
+		}
+		if !strings.Contains(script, "Magic Pairing") {
+			t.Errorf("expected script to contain Magic Pairing banner")
+		}
+	})
 }

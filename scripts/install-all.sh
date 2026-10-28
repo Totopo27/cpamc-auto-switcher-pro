@@ -24,6 +24,13 @@ TARGET_KEY="${CPAMC_KEY:-${CLIPROXYAPI_MANAGEMENT_KEY:-}}"
 NON_INTERACTIVE=false
 INSTALL_PLUGIN_ONLY=false
 INSTALL_EXTENSION_ONLY=false
+DOCKER_FOUND=false
+DOCKER_CONTAINER=""
+DOCKER_PORT=""
+DOCKER_PLUGINS_HOST=""
+DOCKER_CONFIG_HOST=""
+PROCESS_FOUND=false
+PROCESS_PORT=""
 
 print_banner() {
     cat << "EOF"
@@ -112,7 +119,10 @@ detect_local_cpamc() {
     DOCKER_PORT=""
     DOCKER_PLUGINS_HOST=""
     DOCKER_CONFIG_HOST=""
+    PROCESS_FOUND=false
+    PROCESS_PORT=""
 
+    # 1. Detección Docker / Podman
     if command -v docker >/dev/null 2>&1; then
         local cid
         cid=$(docker ps -q -f name=cli-proxy-api 2>/dev/null || true)
@@ -138,34 +148,101 @@ detect_local_cpamc() {
             fi
         fi
     fi
+
+    # 2. Detección de Procesos Locales en RAM (cli-proxy-api / CLIProxyAPI)
+    if [ "$DOCKER_FOUND" = false ]; then
+        local pids
+        pids=$(pgrep -f "cli-proxy-api" 2>/dev/null || pgrep -f "CLIProxyAPI" 2>/dev/null || true)
+        if [ -n "$pids" ]; then
+            PROCESS_FOUND=true
+            local detected_port=""
+            if command -v ss >/dev/null 2>&1; then
+                detected_port=$(ss -tulpn 2>/dev/null | grep -E "cli-proxy|CLIProxy" | grep -oE ":[0-9]+" | head -n1 | tr -d ":" || true)
+            fi
+            if [ -z "$detected_port" ] && command -v lsof >/dev/null 2>&1; then
+                detected_port=$(lsof -nP -iTCP -sTCP:LISTEN 2>/dev/null | grep -E "cli-proxy|CLIProxy" | grep -oE ":[0-9]+" | head -n1 | tr -d ":" || true)
+            fi
+            PROCESS_PORT="${detected_port:-8317}"
+        fi
+    fi
 }
 
 # ------------------------------------------------------------------------------
-# 2. ASISTENTE GUIADO DE CONEXIÓN (LOCAL / LAN / VPS)
+# 2. ASISTENTE GUIADO DE CONEXIÓN (BOUNDED DISCOVERY / LAN / VPS)
 # ------------------------------------------------------------------------------
 resolve_connectivity() {
     if [ -n "$TARGET_URL" ]; then
-        # Limpiar trailing slash y normalizar
         TARGET_URL="${TARGET_URL%/}"
         TARGET_URL="${TARGET_URL%/v1}"
         return 0
     fi
 
-    if [ "$DOCKER_FOUND" = true ] && [ "$NON_INTERACTIVE" = true ]; then
-        TARGET_URL="http://localhost:${DOCKER_PORT:-8317}"
-        return 0
+    # Sondeo acotado ultrarrápido (timeout 800ms) sobre candidatos deterministas (cero escaneos ciegos)
+    local candidate_urls=()
+    if [ "$DOCKER_FOUND" = true ]; then
+        candidate_urls+=("http://localhost:${DOCKER_PORT:-8317}")
+    fi
+    if [ "$PROCESS_FOUND" = true ]; then
+        candidate_urls+=("http://localhost:${PROCESS_PORT:-8317}")
+    fi
+    if [ -f "$HOME/.cliproxy_url" ]; then
+        local saved_url
+        saved_url=$(cat "$HOME/.cliproxy_url" 2>/dev/null | tr -d '\r\n')
+        [ -n "$saved_url" ] && candidate_urls+=("$saved_url")
+    fi
+    candidate_urls+=("http://localhost:8317")
+    candidate_urls+=("http://127.0.0.1:8317")
+
+    # Si corre en WSL2, añadir gateway de host Windows
+    if [ -n "${WSL_DISTRO_NAME:-}" ] || grep -qi "microsoft" /proc/version 2>/dev/null; then
+        local wsl_gw
+        wsl_gw=$(ip route show default 2>/dev/null | awk '{print $3}' || true)
+        [ -n "$wsl_gw" ] && candidate_urls+=("http://${wsl_gw}:8317")
+        candidate_urls+=("http://host.docker.internal:8317")
+    fi
+
+    echo -e "🔍 Verificando candidatos locales..."
+    for cand in "${candidate_urls[@]}"; do
+        local clean_cand="${cand%/}"
+        clean_cand="${clean_cand%/v1}"
+        local code=""
+        code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 0.8 -m 1.5 "${clean_cand}/v1/models" 2>/dev/null || true)
+        if [ "$code" = "200" ] || [ "$code" = "401" ] || [ "$code" = "403" ]; then
+            TARGET_URL="$clean_cand"
+            echo -e "${GREEN}    [✓] Servidor CPAMC detectado en:${RESET} ${BOLD}${TARGET_URL}${RESET}"
+            break
+        fi
+    done
+
+    if [ -n "$TARGET_URL" ]; then
+        if [ "$NON_INTERACTIVE" = true ]; then
+            [ -z "$TARGET_KEY" ] && [ -f "$HOME/.cliproxy_management_key" ] && TARGET_KEY=$(cat "$HOME/.cliproxy_management_key" 2>/dev/null | tr -d '\r\n')
+            return 0
+        fi
+
+        echo -e "\n${BOLD}¿Deseas conectar tu agente a esta instancia activa detectada?${RESET}"
+        local confirm_use=""
+        read -r -p "👉 [S/n] (por defecto: S): " confirm_use
+        confirm_use="${confirm_use:-S}"
+        if [[ "$confirm_use" =~ ^[SsYy]$ ]]; then
+            if [ -z "$TARGET_KEY" ] && [ -f "$HOME/.cliproxy_management_key" ]; then
+                TARGET_KEY=$(cat "$HOME/.cliproxy_management_key" 2>/dev/null | tr -d '\r\n')
+            fi
+            return 0
+        fi
+        TARGET_URL=""
     fi
 
     if [ "$DOCKER_FOUND" = true ]; then
-        echo -e "${GREEN}🔍 ¡Contenedor Docker local detectado!${RESET}"
-        echo -e "   Contenedor: ${BOLD}${DOCKER_CONTAINER}${RESET} (Puerto: ${CYAN}${DOCKER_PORT}${RESET})"
-        echo ""
+        echo -e "${GREEN}ℹ️  Contenedor Docker local detectado:${RESET} ${BOLD}${DOCKER_CONTAINER}${RESET} (Puerto: ${CYAN}${DOCKER_PORT}${RESET})"
+    elif [ "$PROCESS_FOUND" = true ]; then
+        echo -e "${GREEN}ℹ️  Proceso CPAMC detectado en RAM${RESET} (Puerto: ${CYAN}${PROCESS_PORT}${RESET})"
     else
-        echo -e "${YELLOW}ℹ️  No se detectó un contenedor local 'cli-proxy-api' activo en esta máquina.${RESET}"
+        echo -e "${YELLOW}ℹ️  No se detectó un servidor CPAMC en localhost.${RESET}"
     fi
 
     echo -e "${BOLD}¿Dónde está alojado tu servidor CPAMC?${RESET}"
-    echo -e "  ${CYAN}[1]${RESET} Localhost estándar (${GREEN}http://localhost:${DOCKER_PORT:-8317}${RESET})"
+    echo -e "  ${CYAN}[1]${RESET} Localhost estándar (${GREEN}http://localhost:${DOCKER_PORT:-${PROCESS_PORT:-8317}}${RESET})"
     echo -e "  ${CYAN}[2]${RESET} Servidor en Red Local / LAN (${YELLOW}ej: http://192.168.1.100:8317${RESET})"
     echo -e "  ${CYAN}[3]${RESET} VPS / Servidor Remoto en la Nube (${MAGENTA}ej: https://vps.midominio.com:8317${RESET})"
     echo -e "  ${CYAN}[4]${RESET} Escribir URL personalizada manualmente"
@@ -181,11 +258,11 @@ resolve_connectivity() {
 
     case "$choice" in
         1)
-            TARGET_URL="http://localhost:${DOCKER_PORT:-8317}"
+            TARGET_URL="http://localhost:${DOCKER_PORT:-${PROCESS_PORT:-8317}}"
             ;;
         2)
             echo ""
-            echo -e "${YELLOW}📌 Ejemplo para Red Local:${RESET} http://192.168.1.100:8317 o http://192.168.1.100:8317"
+            echo -e "${YELLOW}📌 Ejemplo para Red Local:${RESET} http://192.168.1.100:8317"
             read -r -p "✍️  Ingresa la IP y puerto de tu CPAMC: " input_url
             TARGET_URL="${input_url:-http://192.168.1.100:8317}"
             ;;
@@ -193,7 +270,6 @@ resolve_connectivity() {
             echo ""
             echo -e "${MAGENTA}📌 Ejemplos para VPS / Remoto:${RESET}"
             echo -e "   - https://cpamc.midominio.com"
-            echo -e "   - http://142.250.190.46:8317"
             echo -e "   - http://vps-servidor.xyz:8317"
             read -r -p "✍️  Ingresa la URL pública o dominio de tu VPS: " input_url
             TARGET_URL="${input_url:-https://vps.midominio.com:8317}"
@@ -203,7 +279,7 @@ resolve_connectivity() {
             TARGET_URL="${input_url:-http://localhost:8317}"
             ;;
         *)
-            TARGET_URL="http://localhost:${DOCKER_PORT:-8317}"
+            TARGET_URL="http://localhost:${DOCKER_PORT:-${PROCESS_PORT:-8317}}"
             ;;
     esac
 
@@ -211,11 +287,16 @@ resolve_connectivity() {
     TARGET_URL="${TARGET_URL%/}"
     TARGET_URL="${TARGET_URL%/v1}"
 
-    # Preguntar API Key si no fue provista y no estamos en localhost estándar
-    if [ -z "$TARGET_KEY" ] && [ "$TARGET_URL" != "http://localhost:8317" ] && [ "$NON_INTERACTIVE" = false ]; then
+    # Preguntar Management Key si no fue provista
+    if [ -z "$TARGET_KEY" ] && [ -f "$HOME/.cliproxy_management_key" ]; then
+        TARGET_KEY=$(cat "$HOME/.cliproxy_management_key" 2>/dev/null | tr -d '\r\n')
+    fi
+
+    if [ -z "$TARGET_KEY" ] && [ "$NON_INTERACTIVE" = false ]; then
         echo ""
-        echo -e "${CYAN}🔑 Autenticación (Opcional):${RESET}"
-        read -r -p "Ingresa tu Management Key / API Key (Enter si no requiere): " input_key
+        echo -e "${CYAN}🔑 Autenticación Administrativa (Management Key):${RESET}"
+        echo -e "   (Nota: Es la clave de gestión para consultar pools y cuotas, NO la API key de modelos)"
+        read -r -p "Ingresa tu Management Key (Enter para omitir si no requiere): " input_key
         TARGET_KEY="$input_key"
     fi
 }
@@ -239,9 +320,13 @@ verify_connection() {
         echo -e "        Continuando la instalación con el endpoint configurado."
     fi
 
-    # Persistir endpoint en ~/.cliproxy_url para enlace automático de agentes
+    # Persistir endpoint y key en archivos canónicos con permisos 600
     echo "${TARGET_URL}" > "${HOME}/.cliproxy_url"
     chmod 600 "${HOME}/.cliproxy_url" 2>/dev/null || true
+    if [ -n "$TARGET_KEY" ]; then
+        echo "${TARGET_KEY}" > "${HOME}/.cliproxy_management_key"
+        chmod 600 "${HOME}/.cliproxy_management_key" 2>/dev/null || true
+    fi
 }
 
 # ------------------------------------------------------------------------------
@@ -290,20 +375,37 @@ install_plugin() {
     # Buscar binario compilado localmente si estamos en el repositorio
     local repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || true)"
     local local_so="${repo_root}/bin/${so_name}"
+    local tmp_so="${plugin_target_dir}/${so_name}.tmp.$$"
+    local old_so="${plugin_target_dir}/${so_name}.old"
 
     if [ -f "$local_so" ]; then
-        cp -f "$local_so" "${plugin_target_dir}/${so_name}"
-        echo -e "${GREEN}    [✓] Plugin copiado desde binario local compilado.${RESET}"
+        cp -f "$local_so" "$tmp_so"
+        echo -e "${GREEN}    [✓] Plugin preparado desde binario local compilado.${RESET}"
     else
         echo -e "Descargando plugin binario precompilado desde GitHub..."
         local dl_url="${REPO_URL}/raw/main/bin/${so_name}"
-        if curl -sSL -f -o "${plugin_target_dir}/${so_name}" "$dl_url" 2>/dev/null; then
+        if curl -sSL -f -o "$tmp_so" "$dl_url" 2>/dev/null; then
             echo -e "${GREEN}    [✓] Plugin descargado con éxito.${RESET}"
         else
             echo -e "${YELLOW}    [!] No se pudo descargar directamente desde raw GitHub.${RESET}"
             echo -e "    Por favor compila localmente con './scripts/build-plugin.sh ${arch}' si eres desarrollador."
+            rm -f "$tmp_so"
+            return 1
         fi
     fi
+
+    chmod 755 "$tmp_so" 2>/dev/null || true
+
+    # Hot-Swap Seguro de Inodo (Evita SIGSEGV en Linux y bloqueos en caliente)
+    if [ -f "${plugin_target_dir}/${so_name}" ]; then
+        mv -f "${plugin_target_dir}/${so_name}" "$old_so" 2>/dev/null || true
+    fi
+    mv -f "$tmp_so" "${plugin_target_dir}/${so_name}"
+    rm -f "$old_so" 2>/dev/null || true
+    echo -e "${GREEN}    [✓] Binario CGO desplegado mediante sustitución atómica de inodo.${RESET}"
+
+    # Asegurar permisos saludables en directorio de almacenamiento para SQLite WAL
+    chmod 775 "${plugin_target_dir}" 2>/dev/null || true
 
     # Configuración atómica en config.yaml si existe
     if [ -f "$config_file" ]; then

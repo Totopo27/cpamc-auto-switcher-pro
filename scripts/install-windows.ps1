@@ -263,11 +263,41 @@ if (-not $ExtensionOnly) {
         $targetDll = Join-Path $pluginsDir "auto-switcher-pro-windows-amd64.dll"
         $dllAcquired = $false
 
-        # 1. Usar binario local si existe
+        # Verificar si la DLL existente está bloqueada por el proceso de CPAMC
+        $canWriteDll = $true
+        if (Test-Path $targetDll) {
+            try {
+                $testStream = [System.IO.File]::Open($targetDll, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+                $testStream.Close()
+            } catch {
+                $canWriteDll = $false
+            }
+        }
+
+        if (-not $canWriteDll) {
+            Write-Host "  ⚠️ La biblioteca DLL actual está bloqueada en memoria por CPAMC en ejecución." -ForegroundColor Yellow
+            $resp = Read-Host "  ¿Deseas reiniciar grácilmente el proceso para actualizar el plugin? [S/n]"
+            if ($resp -match "^[nN]") {
+                Write-Host "  Reemplazo de DLL omitido por solicitud del usuario." -ForegroundColor DarkGray
+            } else {
+                Stop-Process -Name "cli-proxy-api", "CLIProxyAPI" -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Milliseconds 800
+            }
+        }
+
+        # 1. Usar binario local si existe con sustitución temporal segura
+        $tmpDll = "$targetDll.tmp-$timestamp"
         if ($binSource -and (Test-Path $binSource)) {
-            Copy-Item -Force -Path $binSource -Destination $targetDll
+            Copy-Item -Force -Path $binSource -Destination $tmpDll
+            if (Test-Path $targetDll) {
+                $oldDll = "$targetDll.old"
+                Remove-Item -Force -Path $oldDll -ErrorAction SilentlyContinue
+                Move-Item -Force -Path $targetDll -Destination $oldDll -ErrorAction SilentlyContinue
+            }
+            Move-Item -Force -Path $tmpDll -Destination $targetDll
+            Remove-Item -Force -Path "$targetDll.old" -ErrorAction SilentlyContinue
             $dllAcquired = $true
-            Write-Host "  ✓ Plugin DLL instalado desde paquete local." -ForegroundColor Green
+            Write-Host "  ✓ Plugin DLL instalado mediante sustitución atómica." -ForegroundColor Green
         } else {
             # 2. Descargar DLL desde Release oficial de GitHub
             Write-Host "  Descargando DLL oficial para Windows desde GitHub Releases..." -ForegroundColor Gray
@@ -277,13 +307,22 @@ if (-not $ExtensionOnly) {
             )
             foreach ($u in $releaseUrls) {
                 try {
-                    Invoke-WebRequest -Uri $u -OutFile $targetDll -ErrorAction Stop
-                    if ((Test-Path $targetDll) -and ((Get-Item $targetDll).Length -gt 1000000)) {
+                    Invoke-WebRequest -Uri $u -OutFile $tmpDll -ErrorAction Stop
+                    if ((Test-Path $tmpDll) -and ((Get-Item $tmpDll).Length -gt 1000000)) {
+                        if (Test-Path $targetDll) {
+                            $oldDll = "$targetDll.old"
+                            Remove-Item -Force -Path $oldDll -ErrorAction SilentlyContinue
+                            Move-Item -Force -Path $targetDll -Destination $oldDll -ErrorAction SilentlyContinue
+                        }
+                        Move-Item -Force -Path $tmpDll -Destination $targetDll
+                        Remove-Item -Force -Path "$targetDll.old" -ErrorAction SilentlyContinue
                         $dllAcquired = $true
-                        Write-Host "  ✓ Plugin DLL descargado exitosamente." -ForegroundColor Green
+                        Write-Host "  ✓ Plugin DLL descargado e instalado exitosamente." -ForegroundColor Green
                         break
                     }
-                } catch {}
+                } catch {
+                    Remove-Item -Force -Path $tmpDll -ErrorAction SilentlyContinue
+                }
             }
         }
 

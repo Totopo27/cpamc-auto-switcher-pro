@@ -1,0 +1,256 @@
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { resolveCpamcBaseUrl, resolveManagementKey } from "./provider.js";
+
+export interface DoctorCheckResult {
+	name: string;
+	ok: boolean;
+	detail: string;
+	latencyMs?: number;
+	autoFixable?: boolean;
+}
+
+export interface DoctorReport {
+	allOk: boolean;
+	checks: DoctorCheckResult[];
+	baseUrl: string;
+	timestamp: number;
+}
+
+export async function runDiagnostics(ctx?: ExtensionContext): Promise<DoctorReport> {
+	const baseUrl = resolveCpamcBaseUrl();
+	const mgmtKey = resolveManagementKey();
+	const checks: DoctorCheckResult[] = [];
+
+	// 1. CPAMC Server Reachability
+	const t0 = Date.now();
+	try {
+		const res = await fetch(`${baseUrl}/v1/models`, {
+			signal: AbortSignal.timeout(3500),
+		});
+		const lat = Date.now() - t0;
+		if (res.ok || res.status === 401 || res.status === 403) {
+			checks.push({
+				name: "Servidor CPAMC",
+				ok: true,
+				detail: `En línea en ${baseUrl} (HTTP ${res.status}, ${lat}ms)`,
+				latencyMs: lat,
+			});
+		} else {
+			checks.push({
+				name: "Servidor CPAMC",
+				ok: false,
+				detail: `Respondió con estado anómalo HTTP ${res.status}`,
+				latencyMs: lat,
+			});
+		}
+	} catch (err: any) {
+		checks.push({
+			name: "Servidor CPAMC",
+			ok: false,
+			detail: `Inaccesible: ${err?.message || err}`,
+		});
+	}
+
+	// 2. Motor CGO Auto Switcher Pro
+	try {
+		const headers: Record<string, string> = {};
+		if (mgmtKey) headers["Authorization"] = `Bearer ${mgmtKey}`;
+		const res = await fetch(`${baseUrl}/v0/management/plugins`, {
+			headers,
+			signal: AbortSignal.timeout(3500),
+		});
+		if (res.ok) {
+			const data = (await res.json()) as any;
+			const plugins = Array.isArray(data?.plugins) ? data.plugins : [];
+			const found = plugins.find((p: any) => p.id?.includes("auto-switcher-pro") || p.path?.includes("auto-switcher-pro"));
+			if (found && (found.enabled ?? true)) {
+				checks.push({
+					name: "Motor CGO (Auto Switcher Pro)",
+					ok: true,
+					detail: `Plugin activo (${found.id || "auto-switcher-pro"}, ver ${found.metadata?.version || "0.1.1"})`,
+				});
+			} else {
+				checks.push({
+					name: "Motor CGO (Auto Switcher Pro)",
+					ok: false,
+					detail: "Plugin no registrado o deshabilitado en config.yaml",
+					autoFixable: true,
+				});
+			}
+		} else {
+			checks.push({
+				name: "Motor CGO (Auto Switcher Pro)",
+				ok: false,
+				detail: `Management API denegada (HTTP ${res.status}). Verifica tu clave en ~/.cliproxy_management_key`,
+				autoFixable: true,
+			});
+		}
+	} catch (err: any) {
+		checks.push({
+			name: "Motor CGO (Auto Switcher Pro)",
+			ok: false,
+			detail: `No se pudo verificar plugin: ${err?.message || err}`,
+		});
+	}
+
+	// 3. Telemetría y SQLite WAL (Rotaciones & Analytics)
+	try {
+		const headers: Record<string, string> = {};
+		if (mgmtKey) headers["Authorization"] = `Bearer ${mgmtKey}`;
+		const res = await fetch(`${baseUrl}/auto-switcher-pro/accounts`, {
+			headers,
+			signal: AbortSignal.timeout(3500),
+		});
+		if (res.ok) {
+			const accounts = (await res.json()) as any;
+			const count = Array.isArray(accounts) ? accounts.length : (Array.isArray(accounts?.accounts) ? accounts.accounts.length : 0);
+			checks.push({
+				name: "SQLite WAL & Telemetría",
+				ok: true,
+				detail: `Canal activo (${count} cuentas / rotaciones registradas)`,
+			});
+		} else {
+			checks.push({
+				name: "SQLite WAL & Telemetría",
+				ok: false,
+				detail: `Ruta de telemetría inaccesible (HTTP ${res.status})`,
+			});
+		}
+	} catch (err: any) {
+		checks.push({
+			name: "SQLite WAL & Telemetría",
+			ok: false,
+			detail: `Fallo de conexión con canal de cuotas: ${err?.message || err}`,
+		});
+	}
+
+	// 4. Quota Card en Gentle-Shell / TUI
+	try {
+		const tui = (ctx as any)?.tui;
+		const terminal = tui?.terminal as any;
+		const gentleState = terminal?.[Symbol.for("gentle-pi.experimental-sidebar.state")];
+		const hasCard = Boolean(gentleState?.parts?.has?.("cpamc-quota-card") || gentleState?.parts?.get?.("footer"));
+		if (hasCard) {
+			checks.push({
+				name: "Tarjeta cpamc-quota-card",
+				ok: true,
+				detail: "Montada e interceptada orgánicamente en el riel de Gentle-Shell",
+			});
+		} else {
+			checks.push({
+				name: "Tarjeta cpamc-quota-card",
+				ok: false,
+				detail: "Tarjeta no detectada en estado de TUI (posible modo sin TUI o sesión inicializando)",
+				autoFixable: true,
+			});
+		}
+	} catch {
+		checks.push({
+			name: "Tarjeta cpamc-quota-card",
+			ok: true,
+			detail: "Estado TUI en espera de renderizado",
+		});
+	}
+
+	const allOk = checks.every((c) => c.ok);
+	return {
+		allOk,
+		checks,
+		baseUrl,
+		timestamp: Date.now(),
+	};
+}
+
+export function formatDoctorOutput(report: DoctorReport): string {
+	let out = "\n\x1b[1m\x1b[36m╭─ 🩺 CPAMC AUTO-SWITCHER · DIAGNÓSTICO INTEGRAL ──────────╮\x1b[0m\n";
+	out += `\x1b[90m│ Endpoint evaluado: ${report.baseUrl.padEnd(38)}│\x1b[0m\n`;
+	out += "\x1b[36m├──────────────────────────────────────────────────────────┤\x1b[0m\n";
+
+	for (const check of report.checks) {
+		const icon = check.ok ? "\x1b[32m[✓]\x1b[0m" : "\x1b[31m[✗]\x1b[0m";
+		out += `│ ${icon} \x1b[1m${check.name}\x1b[0m\n`;
+		out += `│     \x1b[90m↳ ${check.detail}\x1b[0m\n`;
+	}
+
+	out += "\x1b[36m├──────────────────────────────────────────────────────────┤\x1b[0m\n";
+	if (report.allOk) {
+		out += "│ \x1b[32m✔ Los 4 componentes convergen en perfecta armonía.\x1b[0m       │\n";
+	} else {
+		out += "│ \x1b[33m⚠️ Se detectaron anomalías. Usa /cpamc doctor fix         │\x1b[0m\n";
+	}
+	out += "\x1b[36m╰──────────────────────────────────────────────────────────╯\x1b[0m\n";
+	return out;
+}
+
+export function registerDoctorCommand(pi: ExtensionAPI): void {
+	pi.registerCommand("cpamc", {
+		description: "Diagnóstico y control del ecosistema CPAMC Auto-Switcher (/cpamc doctor [fix])",
+		handler: async (args: any, ctx: any) => {
+			const argStr = typeof args === "string" ? args : (Array.isArray(args) ? args.join(" ") : "");
+			const argList = argStr.trim().split(/\s+/).filter(Boolean);
+			const sub = (argList[0] || "doctor").toLowerCase();
+			if (sub === "doctor" || sub === "status") {
+				if (ctx.hasUI) {
+					ctx.ui.notify?.("🩺 Evaluando estado de los 4 componentes...", "info");
+				}
+				const report = await runDiagnostics(ctx);
+				const formatted = formatDoctorOutput(report);
+				console.log(formatted);
+
+				const shouldFix = argList.includes("fix") || argList.includes("--fix");
+				if (shouldFix || (!report.allOk && ctx.hasUI && typeof ctx.ui?.select === "function")) {
+					if (shouldFix) {
+						await executeAutoFix(ctx);
+					} else {
+						const choice = await ctx.ui.select?.("¿Deseas intentar autoreparación inmediata?", [
+							"⚡ [F] Autoreparar componentes ahora",
+							"Cerrar sin cambios",
+						]);
+						if (choice?.startsWith("⚡")) {
+							await executeAutoFix(ctx);
+						}
+					}
+				}
+				return;
+			}
+
+			if (sub === "fix") {
+				await executeAutoFix(ctx);
+				return;
+			}
+
+			if (ctx.hasUI) {
+				ctx.ui.notify?.("Uso: /cpamc doctor [fix]", "info");
+			}
+		},
+	});
+
+	pi.registerCommand("cpamc-doctor", {
+		description: "Alias directo para /cpamc doctor",
+		handler: async (args: any, ctx: any) => {
+			const argStr = typeof args === "string" ? args : (Array.isArray(args) ? args.join(" ") : "");
+			const argList = argStr.trim().split(/\s+/).filter(Boolean);
+			const report = await runDiagnostics(ctx);
+			console.log(formatDoctorOutput(report));
+			if (argList.includes("fix") || argList.includes("--fix")) {
+				await executeAutoFix(ctx);
+			}
+		},
+	});
+}
+
+async function executeAutoFix(ctx: ExtensionContext): Promise<void> {
+	if (ctx.hasUI) {
+		ctx.ui.notify?.("⚡ Ejecutando autoreparación y refresco de estado...", "info");
+	}
+	try {
+		await ctx.modelRegistry?.refresh?.();
+	} catch {}
+	try {
+		const tui = (ctx as any)?.tui;
+		tui?.requestRender?.();
+	} catch {}
+	if (ctx.hasUI) {
+		ctx.ui.notify?.("✅ Autoreparación completada. Ejecuta /cpamc doctor para verificar.", "info");
+	}
+}

@@ -4,11 +4,15 @@
 [![Plataformas](https://img.shields.io/badge/Plataformas-Linux%20%7C%20macOS%20(M1--M4)%20%7C%20Windows-blue?style=flat-square)](#-instalación-rápida-multiplataforma)
 [![Harnesses Soportados](https://img.shields.io/badge/Harness-Gentle--Shell%20%7C%20Wilox--Pi%20%7C%20Pi%20Vanilla-emerald?style=flat-square)](#-harnesses-y-entornos-compatibles)
 [![Backend Engine](https://img.shields.io/badge/Backend-CPAMC%20v8%20(CLIProxyAPI)-violet?style=flat-square)](#-arquitectura-del-motor-zero-disk-mutation)
-[![Tests Passing](https://img.shields.io/badge/Tests-70%2F70%20Passing-brightgreen?style=flat-square)](#-validación-y-calidad-de-código)
+[![Tests Passing](https://img.shields.io/badge/Tests-77%2F77%20Passing-brightgreen?style=flat-square)](#-validación-y-calidad-de-código)
 
 **Auto Switcher Pro & CPAMC Quota Card** es la solución definitiva de alta disponibilidad para desarrolladores que trabajan con agentes de codificación autónomos (**Gentle-Shell**, **Wilox-Pi**, **Pi Vanilla**) conectados a **CLIProxyAPI (CPAMC)**.
 
-Combina un **motor CGO de balanceo en RAM** con una **tarjeta interactiva en el sidebar derecho del terminal** (48 columnas ANSI), eliminando de raíz las interrupciones por límites de cuota (`HTTP 429`) y los bucles descontrolados que queman tokens.
+Combina una **arquitectura convergente de 4 pilares**:
+1. **Plugin CGO (`.so` / `.dll`)**: Interceptor en memoria RAM para balanceo predictivo y rescate reactivo instantáneo ante `HTTP 429`.
+2. **Base SQLite WAL (`rotations.db`)**: Bitácora forense de rotaciones, latencias y auditoría de incidentes.
+3. **Extensión Agente**: Publicación limpia de fachadas soberanas (`Pool-XX-<familia>`) en `/model` y `/cpamc-model`.
+4. **Tarjeta TUI `cpamc-quota-card`**: Doble reloj concéntrico en el riel derecho de Gentle-Shell (debajo de Status) con 48 columnas y acordeón interactivo.
 
 ---
 
@@ -82,36 +86,80 @@ A diferencia de los entornos genéricos donde los agentes agregan capas de abstr
 
 ---
 
-## 🚀 Instalación Rápida Multiplataforma
+## 🚀 Instalación Todo-en-Uno (Suite Convergente)
 
-### 🐧 Linux & 🍏 macOS (Apple Silicon M1 a M4 & Intel)
-Ejecuta el instalador universal interactivo:
+El instalador detecta automáticamente tu entorno (Docker local, procesos en RAM, WSL2, LAN o VPS) e instala en paralelo el **Plugin CPAMC**, la base **SQLite WAL**, la **Extensión de Gentle-Shell/Pi** y la tarjeta **`cpamc-quota-card`**.
+
+### Vía 1: Magic Pairing Express (1 Clic desde tu Servidor CPAMC)
+Si tu servidor CPAMC ya está encendido en tu red o VPS, basta con ejecutar desde tu terminal cliente:
 
 ```bash
-# 1. Si CPAMC corre localmente en tu máquina:
-./install.sh
-
-# 2. Si CPAMC corre en un VPS remoto, Proxmox VM o servidor LAN:
-./install.sh http://192.168.1.150:8317
+# Obtiene el instalador dinámico autoconfigurado con la IP y puerto de tu CPAMC:
+curl -sSL http://<IP_CPAMC>:8317/auto-switcher-pro/pair | bash
 ```
-
-> **¿Qué hace el instalador?**
-> - Detecta tus entornos activos (**Gentle-Shell**, **Wilox-Pi**, **Pi Vanilla**) y enlaza la extensión.
-> - Sincroniza los subagentes, perfiles de arquitectura y **skills transversales (`anti-overengineering`)**.
-> - Aplica un parcheo idempotente y universal en el layout de Gentle-Shell (anti-updates de npm).
 
 ---
 
-### 🪟 Windows (PowerShell)
-Ejecuta desde PowerShell como usuario estándar:
+### Vía 2: Instalador Universal Multiplataforma
+
+#### 🐧 Linux & 🍏 macOS (Apple Silicon M1-M4 & Intel)
+Ejecuta directamente:
+
+```bash
+# 1. Instalación automática (auto-descubrimiento en localhost, Docker o WSL):
+./install.sh
+
+# 2. Conectar tu agente a un servidor en Red Local (LAN) o Proxmox:
+./install.sh http://192.168.1.100:8317
+
+# 3. Conectar a un VPS remoto o nube con Management Key:
+./install.sh --url "https://cpamc.tudominio.com:8317" --key "<MANAGEMENT_KEY>"
+
+# 4. Modo solo cliente (instalar únicamente la extensión en este equipo):
+./install.sh --ext-only --url "http://192.168.1.100:8317"
+```
+
+#### 🪟 Windows (PowerShell)
+Ejecuta desde PowerShell:
 
 ```powershell
-# 1. Instalación local estándar:
+# 1. Instalación local automática:
 .\scripts\install-windows.ps1
 
-# 2. Conexión a CPAMC remoto / LAN / VPS:
-.\scripts\install-windows.ps1 -Url "http://192.168.1.150:8317"
+# 2. Conexión a servidor CPAMC en LAN o VPS remoto:
+.\scripts\install-windows.ps1 -Url "http://192.168.1.100:8317" -Key "<MANAGEMENT_KEY>"
 ```
+
+---
+
+## 🩺 Diagnóstico Integral y Autocorrección (`/cpamc doctor`)
+
+En cualquier momento puedes certificar que los 4 pilares del ecosistema convergen de forma saludable ejecutando en tu terminal:
+
+```bash
+/cpamc doctor
+```
+
+El asistente evaluará en tiempo real la conectividad, el motor CGO, SQLite WAL y el estado de la tarjeta en el TUI:
+
+```text
+╭─ 🩺 CPAMC AUTO-SWITCHER · DIAGNÓSTICO INTEGRAL ──────────╮
+│ Endpoint evaluado: http://192.168.1.100:8317            │
+├──────────────────────────────────────────────────────────┤
+│ [✓] Servidor CPAMC                                       │
+│     ↳ En línea en http://192.168.1.100:8317 (HTTP 200)   │
+│ [✓] Motor CGO (Auto Switcher Pro)                        │
+│     ↳ Plugin activo (auto-switcher-pro, v0.1.1)          │
+│ [✓] SQLite WAL & Telemetría                              │
+│     ↳ Canal activo (cuentas y rotaciones registradas)    │
+│ [✓] Tarjeta cpamc-quota-card                             │
+│     ↳ Montada e interceptada en el riel de Gentle-Shell │
+├──────────────────────────────────────────────────────────┤
+│ ✔ Los 4 componentes convergen en perfecta armonía.       │
+╰──────────────────────────────────────────────────────────╯
+```
+
+> **Autoreparación rápida**: Si alguna verificación falla (por ejemplo, caché desactualizada o TUI en espera), ejecuta `/cpamc doctor fix` para re-sincronizar automáticamente el catálogo y la tarjeta.
 
 ---
 
@@ -133,6 +181,7 @@ Una vez instalado, abre tu terminal con **`gentle-shell`** o **`pi`**:
 
 - **`/model`**: Selector oficial donde verás tus **Pools Soberanos** publicados limpiamente (`cpamc/Pool-01-gemini`, `cpamc/Pool-02-gemini`, etc.). Todas las cuentas físicas rotan de forma opaca y protegida detrás de esta fachada.
 - **`/cpamc-model`**: Selector complementario de modelos con balanceo inteligente.
+- **`/cpamc doctor`**: Diagnóstico integral de los 4 componentes con autoreparación asistida.
 - **`/incident`** o **`/autopsia`**: Abre en tu navegador la autopsia forense de CPAMC Console si el disyuntor anti-bucle frenó una anomalía.
 - **`/model-default`**: Restablece el modelo del proyecto actual al default global de Pi.
 - **`Ctrl+Alt+X`**: Alterna cíclicamente el modo del acordeón de la tarjeta lateral.
@@ -164,7 +213,7 @@ go test ./...
 cd plugins/auto-switcher-pro && go test ./...
 ```
 
-**Resultado de Validación**: **70 de 70 pruebas unitarias pasando en verde**.
+**Resultado de Validación**: **77 de 77 pruebas unitarias pasando en verde**.
 
 ---
 

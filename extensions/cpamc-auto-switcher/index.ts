@@ -8,6 +8,7 @@ import { initDynamicProvider, resolveCpamcBaseUrl, resolveManagementKey } from "
 import { initFailoverHook, scheduleAutoSwitcher } from "./src/failover.js";
 import { registerModelPicker } from "./src/picker.js";
 import { registerAgentMatrixCommand } from "./src/matrix-command.js";
+import { registerDoctorCommand } from "./src/doctor.js";
 import { CpamcTuiAdapter } from "./src/adapter.js";
 import { querySwitcherAccounts, checkProactivePoolRebalance, applyOptimisticQuotaDecrement, getRotationPairForModelSync, updateContextUsage, recordContextCompression } from "./src/store.js";
 import { saveProjectModel, getProjectModel, clearProjectModel } from "./src/project-model-store.js";
@@ -67,6 +68,9 @@ export default function initCpamcUnifiedExtension(pi: ExtensionAPI): void {
 
 	// 3a. Inicializar comando /agent:matrix
 	registerAgentMatrixCommand(pi);
+
+	// 3b. Inicializar comando /cpamc doctor (diagnóstico integral y autoreparación)
+	registerDoctorCommand(pi);
 
 	// 3b. Comando para restablecer el modelo del proyecto actual al default de Pi
 	pi.registerCommand("model-default", {
