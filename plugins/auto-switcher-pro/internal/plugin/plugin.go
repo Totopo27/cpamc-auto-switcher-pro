@@ -446,7 +446,17 @@ func MatchProfilesRoute(rawPath string) (subpath string, matched bool) {
 
 	matchedIdx := -1
 	for i, seg := range segments {
-		if seg == "00-home" || seg == "home" || seg == "profiles" || seg == "center" || seg == "control-switcher" || seg == "pulse-tokens" || seg == "pulso-tokens" || seg == "create-prefixes" || seg == "create-groups" || seg == "auto-auth-files" || seg == "maintenance" || seg == "quick-guide" || seg == "audit-log" || seg == "agent-matrix" {
+		if seg == "00-home" || seg == "home" || seg == "profiles" || seg == "center" ||
+			seg == "control-switcher" || seg == "02-control-switcher" ||
+			seg == "pulse-tokens" || seg == "06-pulse-tokens" || seg == "pulso-tokens" ||
+			seg == "create-prefixes" || seg == "04-create-prefixes" ||
+			seg == "create-groups" || seg == "01-create-groups" ||
+			seg == "auto-auth-files" || seg == "03-auto-auth-files" ||
+			seg == "maintenance" || seg == "09-maintenance" ||
+			seg == "quick-guide" || seg == "10-quick-guide" ||
+			seg == "audit-log" || seg == "08-audit-log" ||
+			seg == "agent-matrix" || seg == "05-agent-matrix" ||
+			seg == "07-profiles" {
 			matchedIdx = i
 			break
 		}
