@@ -270,9 +270,27 @@ export function getNodeProvider(node) {
   return prov || 'unknown';
 }
 
-// Obtiene el identificador de proveedor canónico de un pool a partir de su familia o nodos miembros
+// Obtiene el identificador de proveedor canónico de un pool a partir de sus cuentas reales o prefijo base
 export function getPoolProvider(pool) {
   if (!pool) return '';
+
+  // 1. Las cuentas físicas reales mandan sobre cualquier metadato heredado
+  const sampleNode = pool.root || (pool.reserves && pool.reserves[0]?.node);
+  if (sampleNode) {
+    const prov = getNodeProvider(sampleNode);
+    if (prov && prov !== 'unknown') return prov;
+  }
+
+  // 2. Si no hay nodo resuelto, el prefijo base del pool define el proveedor
+  const bp = (pool.basePrefix || '').toLowerCase().trim();
+  if (bp.startsWith('agy') || bp.startsWith('g')) return 'antigravity';
+  if (bp.startsWith('clau')) return 'claude';
+  if (bp.startsWith('codex')) return 'codex';
+  for (const [provKey, meta] of Object.entries(OMNIAUTH_PROVIDER_META)) {
+    if (bp.startsWith(meta.hintPrefix)) return provKey;
+  }
+
+  // 3. Fallback a pool.family si no hubo coincidencia previa
   if (pool.family) {
     const fam = pool.family.toLowerCase();
     if (fam.startsWith('gemini')) return 'antigravity';
@@ -280,17 +298,7 @@ export function getPoolProvider(pool) {
     if (fam === 'codex') return 'codex';
     if (OMNIAUTH_PROVIDER_META[fam]) return fam;
   }
-  const sampleNode = pool.root || (pool.reserves && pool.reserves[0]?.node);
-  if (sampleNode) {
-    return getNodeProvider(sampleNode);
-  }
-  const bp = (pool.basePrefix || '').toLowerCase();
-  if (bp.startsWith('agy') || bp.startsWith('g')) return 'antigravity';
-  if (bp.startsWith('clau')) return 'claude';
-  if (bp.startsWith('codex')) return 'codex';
-  for (const [provKey, meta] of Object.entries(OMNIAUTH_PROVIDER_META)) {
-    if (bp.startsWith(meta.hintPrefix)) return provKey;
-  }
+
   return 'unknown';
 }
 
@@ -939,11 +947,21 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
       const extractedNum = extractPoolNumber(pool);
       const poolIndex = extractedNum < 999999 ? extractedNum : (poolsMap.size + 1);
       const famStr = (pool.family || basePrefix || '').toLowerCase();
-      const famSuffix = famStr.includes('codex')
-        ? 'codex'
-        : famStr.includes('clau') || famStr.includes('son') || famStr.includes('opus')
-        ? 'claude'
-        : 'gemini';
+      const bpLower = (basePrefix || '').toLowerCase();
+      let famSuffix = 'gemini';
+      if (famStr.includes('codex') || bpLower.startsWith('codex')) {
+        famSuffix = 'codex';
+      } else if (famStr.includes('clau') || famStr.includes('son') || famStr.includes('opus') || bpLower.startsWith('clau')) {
+        famSuffix = 'claude';
+      } else {
+        // Buscar si coincide con proveedores de OmniAuth Pro (nim, nan, etc.)
+        for (const [provKey, meta] of Object.entries(OMNIAUTH_PROVIDER_META)) {
+          if (famStr.includes(provKey) || bpLower.startsWith(meta.hintPrefix)) {
+            famSuffix = provKey;
+            break;
+          }
+        }
+      }
       const canonicalPoolName = `Pool-${String(poolIndex).padStart(2, '0')}-${famSuffix}`;
       const poolId = pool.id || canonicalPoolName;
       const displayName =
@@ -986,11 +1004,19 @@ function sortModelsByFamilyAndVersion(models, familyRole, isCodex, isGemini) {
       if (!poolsMap.has(baseKey)) {
         const poolIndex = poolsMap.size + 1;
         const bkLower = baseKey.toLowerCase();
-        const famSuffix = bkLower.includes('codex')
-          ? 'codex'
-          : bkLower.includes('clau') || bkLower.includes('son') || bkLower.includes('opus')
-          ? 'claude'
-          : 'gemini';
+        let famSuffix = 'gemini';
+        if (bkLower.includes('codex') || bkLower.startsWith('codex')) {
+          famSuffix = 'codex';
+        } else if (bkLower.includes('clau') || bkLower.includes('son') || bkLower.includes('opus') || bkLower.startsWith('clau')) {
+          famSuffix = 'claude';
+        } else {
+          for (const [provKey, meta] of Object.entries(OMNIAUTH_PROVIDER_META)) {
+            if (bkLower.startsWith(meta.hintPrefix)) {
+              famSuffix = provKey;
+              break;
+            }
+          }
+        }
         const canonicalPoolName = `Pool-${String(poolIndex).padStart(2, '0')}-${famSuffix}`;
         poolsMap.set(baseKey, {
           id: canonicalPoolName,

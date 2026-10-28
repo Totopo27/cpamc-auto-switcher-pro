@@ -1369,6 +1369,72 @@ describe('GroupManager - Homologación 2N (dual-familia por rol de cuota)', () =
     expect(screen.queryByTestId('card-adopt-section-nan')).toBeNull();
   });
 
+  it('strictly isolates adopt reserve section: only matching provider pools show the section and non-matching are completely hidden', async () => {
+    vi.spyOn(managementClient, 'listPools').mockResolvedValue({
+      ok: true,
+      pools: [
+        {
+          id: 'Pool-01-gemini',
+          family: 'gemini_pure',
+          base_prefix: 'agy',
+          leader_auth: 'agy-leader.json',
+          reserves: ['agy-res.json'],
+          members: ['agy-leader.json', 'agy-res.json'],
+        },
+        {
+          id: 'Pool-02-codex',
+          family: 'codex',
+          base_prefix: 'codex',
+          leader_auth: 'codex-leader.json',
+          reserves: ['codex-res.json'],
+          members: ['codex-leader.json', 'codex-res.json'],
+        },
+        {
+          id: 'Pool-03-nim',
+          family: 'nim',
+          base_prefix: 'nim',
+          leader_auth: 'nvidia-nim-1.json',
+          reserves: ['nvidia-nim-2.json'],
+          members: ['nvidia-nim-1.json', 'nvidia-nim-2.json'],
+        },
+      ],
+      count: 3,
+    });
+
+    // Escenario de prueba: Hay 1 cuenta libre disponible de CODEX únicamente
+    const mixedPoolNodes = [
+      // Miembros de Gemini
+      { id: 'agy-leader.json', data: { fileName: 'agy-leader.json', email: 'agy1@test.com', prefix: 'agy', provider: 'antigravity' } },
+      { id: 'agy-res.json', data: { fileName: 'agy-res.json', email: 'agy2@test.com', prefix: 'agy_1', provider: 'antigravity' } },
+      // Miembros de Codex
+      { id: 'codex-leader.json', data: { fileName: 'codex-leader.json', email: 'codex1@test.com', prefix: 'codex', provider: 'codex' } },
+      { id: 'codex-res.json', data: { fileName: 'codex-res.json', email: 'codex2@test.com', prefix: 'codex_1', provider: 'codex' } },
+      // Miembros de NVIDIA NIM
+      { id: 'nvidia-nim-1.json', data: { fileName: 'nvidia-nim-1.json', email: 'nim1@test.com', prefix: 'nim', provider: 'nim' } },
+      { id: 'nvidia-nim-2.json', data: { fileName: 'nvidia-nim-2.json', email: 'nim2@test.com', prefix: 'nim_1', provider: 'nim' } },
+      // ÚNICA CUENTA LIBRE: pertenencia estricta a CODEX
+      { id: 'codex-free.json', data: { fileName: 'codex-free.json', email: 'codex_free@test.com', prefix: '', provider: 'codex' } },
+    ];
+
+    render(<GroupManager nodes={mixedPoolNodes} />);
+
+    fireEvent.click(screen.getByTestId('tab-disolver-pools'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('pool-card-agy')).toBeTruthy();
+      expect(screen.getByTestId('pool-card-codex')).toBeTruthy();
+      expect(screen.getByTestId('pool-card-nim')).toBeTruthy();
+    });
+
+    // 1. El pool de CODEX debe MOSTRAR la sección de sumar reserva porque tiene 1 cuenta libre de su proveedor
+    expect(screen.getByTestId('card-adopt-section-codex')).toBeTruthy();
+    expect(screen.getByTestId('select-card-adopt-codex').textContent).toContain('codex_free@test.com');
+
+    // 2. Los pools de GEMINI y NIM NO deben mostrar NINGÚN control ni dato de sumar reserva (deben estar 100% ocultos)
+    expect(screen.queryByTestId('card-adopt-section-agy')).toBeNull();
+    expect(screen.queryByTestId('card-adopt-section-nim')).toBeNull();
+  });
+
   it('allows releasing the leader account and promotes first reserve to leader', async () => {
     const existingPoolsData = [
       {
