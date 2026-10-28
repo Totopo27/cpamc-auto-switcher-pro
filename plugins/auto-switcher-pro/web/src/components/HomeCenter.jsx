@@ -427,9 +427,6 @@ export default function HomeCenter({ onNavigateTab, onOpenLicenseModal }) {
             <div className="cockpit-item cockpit-version">
               <span className="cockpit-label">📦 Versión:</span>
               <span className="cockpit-val text-white">{versionData.current_tag || `v${versionData.current_version}`}</span>
-              <span className="cockpit-badge badge-green" data-testid="badge-free-release">
-                ✓ 100% Gratuito
-              </span>
               <span className={`cockpit-badge ${versionData.update_available ? 'badge-amber' : 'badge-green'}`}>
                 {versionData.update_available ? (
                   <a

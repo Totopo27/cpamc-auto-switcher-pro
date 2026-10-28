@@ -84,11 +84,10 @@ describe('HomeCenter Component - Portada Principal & Directorio de Menús', () =
     expect(screen.getByTestId('pillar-item-1')).toBeTruthy();
   });
 
-  it('renders dynamic simplified cockpit bar (Version and 100% Gratuito badge) and 4 operational/sponsor KPIs', async () => {
+  it('renders dynamic simplified cockpit bar (Version and update/stable badge) and 4 operational/sponsor KPIs', async () => {
     render(<HomeCenter onNavigateTab={vi.fn()} />);
 
     expect(screen.getByTestId('home-cockpit-bar')).toBeTruthy();
-    expect(screen.getByTestId('badge-free-release')).toBeTruthy();
     expect(screen.getByTestId('card-project-support')).toBeTruthy();
     expect(screen.getByTestId('btn-support-coffee')).toBeTruthy();
     expect(screen.getByTestId('kpi-status')).toBeTruthy();
@@ -99,7 +98,6 @@ describe('HomeCenter Component - Portada Principal & Directorio de Menús', () =
 
     await waitFor(() => {
       expect(screen.getByText('v0.1.1')).toBeDefined();
-      expect(screen.getByText('✓ 100% Gratuito')).toBeDefined();
       expect(screen.getByText('✓ Estable')).toBeDefined();
       expect(screen.getByText(/Apoyo al Proyecto Libre/i)).toBeDefined();
       expect(screen.getAllByText(/💖 Invitar un Café al Creador/i).length).toBeGreaterThan(0);
