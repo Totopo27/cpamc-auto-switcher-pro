@@ -390,4 +390,54 @@ describe('App Host Component Integration', () => {
       expect(screen.queryByTestId('toast-auto-update-console')).toBeNull();
     });
   });
+
+  describe('CommunityNoticeModal Trigger Integration on Submenu Click', () => {
+    beforeEach(() => {
+      window.localStorage.clear();
+      vi.spyOn(managementClient, 'getManagementKey').mockReturnValue('valid-key-123');
+      vi.spyOn(managementClient, 'loadAuthFilesWithPrefixes').mockResolvedValue([]);
+    });
+
+    it('renders the coffee support button in the global header and allows manual opening', async () => {
+      // Si ya es supporter, no abre solo
+      window.localStorage.setItem('asp_is_supporter', 'true');
+      render(<App />);
+
+      const coffeeBtn = await screen.findByTestId('btn-open-coffee-modal');
+      expect(coffeeBtn).toBeTruthy();
+
+      expect(screen.queryByTestId('community-notice-modal')).toBeNull();
+      fireEvent.click(coffeeBtn);
+      expect(screen.getByTestId('community-notice-modal')).toBeTruthy();
+    });
+
+    it('triggers community notice modal on submenu navigation when not supporter and not dismissed today', async () => {
+      render(<App />);
+
+      // Abre el modal al navegar/cambiar de pestaña
+      const modal = await screen.findByTestId('community-notice-modal');
+      expect(modal).toBeTruthy();
+
+      // Al cerrar continuando gratis, se oculta
+      fireEvent.click(screen.getByTestId('btn-free-action'));
+      expect(screen.queryByTestId('community-notice-modal')).toBeNull();
+    });
+
+    it('does not trigger modal if user already marked supporter permanently', async () => {
+      window.localStorage.setItem('asp_is_supporter', 'true');
+      render(<App />);
+
+      await screen.findByTestId('btn-reload-profiles');
+      expect(screen.queryByTestId('community-notice-modal')).toBeNull();
+    });
+
+    it('does not trigger modal if user dismissed it for today (within 24h)', async () => {
+      const tomorrow = Date.now() + 12 * 3600 * 1000;
+      window.localStorage.setItem('asp_notice_dismissed_until', String(tomorrow));
+      render(<App />);
+
+      await screen.findByTestId('btn-reload-profiles');
+      expect(screen.queryByTestId('community-notice-modal')).toBeNull();
+    });
+  });
 });

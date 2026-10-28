@@ -178,10 +178,23 @@ export default function App() {
   const consoleCheckExecutedRef = useRef(false);
   const graphRef = useRef(null);
 
-  // Apertura del Comunicado Especial: Se gestiona en el momento oportuno (ej. Crear Pool en GroupManager)
+  // Apertura inteligente del Comunicado Especial:
+  // Se activa al hacer clic o navegar a cualquier submenú 1 vez al día, a menos que ya sea supporter permanente
   useEffect(() => {
-    // Intencionalmente no abre en el boot global para no interrumpir la navegación inicial
-  }, []);
+    try {
+      if (typeof window === 'undefined') return;
+      const isSupporter = localStorage.getItem(STORAGE_KEY_SUPPORTER) === 'true';
+      if (isSupporter) return;
+
+      const dismissedUntil = localStorage.getItem(STORAGE_KEY_DISMISSED);
+      if (dismissedUntil && Number(dismissedUntil) > Date.now()) return;
+
+      // Si no es supporter y no está silenciado hoy, abre el modal
+      setIsNoticeOpen(true);
+    } catch {
+      // Ignorar restricciones locales
+    }
+  }, [activeTab]);
 
   // Escuchar cambios de hash en la barra de direcciones de CPAMC
   useEffect(() => {
@@ -744,6 +757,30 @@ export default function App() {
           >
             <span>❓</span>
             <span>Guía Rápida</span>
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-outline"
+            onClick={() => setIsNoticeOpen(true)}
+            data-testid="btn-open-coffee-modal"
+            title="Invitar un café / Aporte Comunitario Voluntario"
+            style={{
+              padding: '5px 10px',
+              fontSize: '11px',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'rgba(245, 158, 11, 0.15)',
+              color: '#fbbf24',
+              border: '1px solid rgba(245, 158, 11, 0.4)',
+              borderRadius: '6px',
+              cursor: 'pointer',
+            }}
+          >
+            <span>☕</span>
+            <span>Invitar Café</span>
           </button>
 
           <button
