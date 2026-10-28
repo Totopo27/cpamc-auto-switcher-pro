@@ -86,16 +86,20 @@ A diferencia de los entornos genéricos donde los agentes agregan capas de abstr
 
 ---
 
-## 🚀 Instalación Todo-en-Uno (Suite Convergente)
+## 🚀 Instalación Todo-en-Uno (Suite Convergente "Zero to Hero")
 
-El instalador detecta automáticamente tu entorno (Docker local, procesos en RAM, WSL2, LAN o VPS) e instala en paralelo el **Plugin CPAMC**, la base **SQLite WAL**, la **Extensión de Gentle-Shell/Pi** y la tarjeta **`cpamc-quota-card`**.
+El instalador detecta automáticamente tu entorno e instala en paralelo el ecosistema completo:
+- **Si YA tienes CPAMC**: Se conecta de inmediato, inyecta el plugin CGO, habilita SQLite WAL y monta la extensión en Gentle-Shell.
+- **Si NO tienes CPAMC**: El instalador te preguntará si deseas instalar **CLIProxyAPI oficial** (`router-for-me/CLIProxyAPI`); de ser así, descargará el ejecutable oficial (o contenedor Docker), generará `config.yaml` inicial con clave segura y lo iniciará en segundo plano automáticamente.
+
+---
 
 ### Vía 1: Magic Pairing Express (1 Clic desde tu Servidor CPAMC)
-Si tu servidor CPAMC ya está encendido en tu red o VPS, basta con ejecutar desde tu terminal cliente:
+Si tu servidor CPAMC ya está encendido en tu red local o VPS, genera el comando de enlace rápido desde la web de CPAMC y ejecútalo en la terminal de tu agente cliente:
 
 ```bash
-# Obtiene el instalador dinámico autoconfigurado con la IP y puerto de tu CPAMC:
-curl -sSL http://<IP_CPAMC>:8317/auto-switcher-pro/pair | bash
+# Obtiene el instalador autoconfigurado con la IP y puerto de tu CPAMC:
+curl -sSL http://<IP_CPAMC>:8317/v0/management/auto-switcher-pro/pair | bash
 ```
 
 ---
@@ -106,28 +110,28 @@ curl -sSL http://<IP_CPAMC>:8317/auto-switcher-pro/pair | bash
 Ejecuta directamente:
 
 ```bash
-# 1. Instalación automática (auto-descubrimiento en localhost, Docker o WSL):
+# 1. Instalación automática (auto-descubre CPAMC o te ofrece autodesplegarlo):
 ./install.sh
 
 # 2. Conectar tu agente a un servidor en Red Local (LAN) o Proxmox:
 ./install.sh http://192.168.1.100:8317
 
-# 3. Conectar a un VPS remoto o nube con Management Key:
+# 3. Conectar a un VPS remoto con Management Key:
 ./install.sh --url "https://cpamc.tudominio.com:8317" --key "<MANAGEMENT_KEY>"
 
-# 4. Modo solo cliente (instalar únicamente la extensión en este equipo):
+# 4. Modo solo cliente (instalar únicamente la extensión en este equipo sin tocar CPAMC):
 ./install.sh --ext-only --url "http://192.168.1.100:8317"
 ```
 
 #### 🪟 Windows (PowerShell)
-Ejecuta desde PowerShell:
+En Windows (como usuario estándar o administrador):
 
 ```powershell
-# 1. Instalación local automática:
+# 1. Instalación local automática (si no tienes CPAMC, descarga el oficial de GitHub):
 .\scripts\install-windows.ps1
 
-# 2. Conexión a servidor CPAMC en LAN o VPS remoto:
-.\scripts\install-windows.ps1 -Url "http://192.168.1.100:8317" -Key "<MANAGEMENT_KEY>"
+# 2. Conectar tu agente a un servidor CPAMC en Red Local (LAN) o VPS:
+.\scripts\install-windows.ps1 -ExtensionOnly -Url "http://192.168.1.100:8317" -Key "<MANAGEMENT_KEY>"
 ```
 
 ---

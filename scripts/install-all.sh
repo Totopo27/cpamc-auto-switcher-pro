@@ -168,6 +168,123 @@ detect_local_cpamc() {
 }
 
 # ------------------------------------------------------------------------------
+# 1.1. BOOTSTRAP AUTOMÁTICO DE CPAMC OFICIAL (router-for-me/CLIProxyAPI)
+# ------------------------------------------------------------------------------
+bootstrap_official_cpamc() {
+    local arch="amd64"
+    local uname_m
+    uname_m=$(uname -m)
+    if [ "$uname_m" = "aarch64" ] || [ "$uname_m" = "arm64" ]; then
+        arch="arm64"
+    fi
+
+    echo -e "\n${CYAN}================================================================${RESET}"
+    echo -e "${BOLD}⚡ AUTO-DESPLIEGUE DE CPAMC OFICIAL (CLIProxyAPI v8+)${RESET}"
+    echo -e "${CYAN}================================================================${RESET}"
+    echo -e "Origen oficial: ${BOLD}https://github.com/router-for-me/CLIProxyAPI${RESET}"
+
+    local cpamc_home="$HOME/cliproxyapi"
+    mkdir -p "$cpamc_home/plugins" 2>/dev/null || true
+    mkdir -p "$HOME/.cli-proxy-api" 2>/dev/null || true
+
+    # 1. Generar Management Key criptográfica aleatoria para esta máquina
+    local gen_key=""
+    if command -v openssl >/dev/null 2>&1; then
+        gen_key=$(openssl rand -hex 16)
+    else
+        gen_key=$(head -c 16 /dev/urandom 2>/dev/null | od -An -tx1 | tr -d ' \n' || echo "cpa_mgmt_$(date +%s)")
+    fi
+    TARGET_KEY="${TARGET_KEY:-$gen_key}"
+
+    # 2. Generar config.yaml inicial con plugins y clave si no existe
+    local config_file="$cpamc_home/config.yaml"
+    if [ ! -f "$config_file" ]; then
+        cat << EOC > "$config_file"
+server:
+  port: 8317
+api-keys:
+  management-key: "${TARGET_KEY}"
+plugins:
+  enabled: true
+  dir: plugins
+  configs:
+    auto-switcher-pro-linux-${arch}:
+      enabled: true
+EOC
+        chmod 600 "$config_file" 2>/dev/null || true
+        echo -e "${GREEN}    [✓] Archivo config.yaml inicial generado con clave administrativa segura.${RESET}"
+    fi
+
+    # 3. Copiar plugin Auto Switcher Pro (.so)
+    local repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || true)"
+    local so_name="auto-switcher-pro-linux-${arch}.so"
+    local local_so="${repo_root}/bin/${so_name}"
+    if [ -f "$local_so" ]; then
+        cp -f "$local_so" "$cpamc_home/plugins/${so_name}"
+    else
+        curl -sSL -f -o "$cpamc_home/plugins/${so_name}" "${REPO_URL}/raw/main/bin/${so_name}" 2>/dev/null || true
+    fi
+    chmod 755 "$cpamc_home/plugins/${so_name}" 2>/dev/null || true
+
+    # 4. Despliegue de servicio: Vía Docker (preferente) o Binario Nativo
+    if command -v docker >/dev/null 2>&1; then
+        echo -e "Levantando contenedor Docker oficial ${BOLD}eceasy/cli-proxy-api:latest${RESET}..."
+        docker rm -f cli-proxy-api >/dev/null 2>&1 || true
+        if docker run -d --name cli-proxy-api --restart always \
+            -p 8317:8317 \
+            -v "$cpamc_home/config.yaml:/CLIProxyAPI/config.yaml" \
+            -v "$cpamc_home/plugins:/CLIProxyAPI/plugins" \
+            -v "$HOME/.cli-proxy-api:/root/.cli-proxy-api" \
+            eceasy/cli-proxy-api:latest >/dev/null 2>&1; then
+            echo -e "${GREEN}    [✓] Contenedor oficial cli-proxy-api iniciado y escuchando en :8317.${RESET}"
+            DOCKER_FOUND=true
+            DOCKER_CONTAINER="cli-proxy-api"
+            DOCKER_PORT="8317"
+            DOCKER_PLUGINS_HOST="$cpamc_home/plugins"
+            DOCKER_CONFIG_HOST="$cpamc_home/config.yaml"
+            TARGET_URL="http://localhost:8317"
+            sleep 2
+            return 0
+        fi
+    fi
+
+    # Si Docker no está disponible, descargar binario oficial de GitHub Releases
+    echo -e "Descargando binario oficial de CLIProxyAPI desde GitHub Releases..."
+    local api_releases="https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/latest"
+    local pattern="CLIProxyAPI_.*_linux_${arch}\.tar\.gz"
+    if [ "$(uname)" = "Darwin" ]; then
+        pattern="CLIProxyAPI_.*_darwin_${arch}\.tar\.gz"
+    fi
+
+    local dl_url=""
+    dl_url=$(curl -sSL "$api_releases" 2>/dev/null | grep "browser_download_url" | grep -E "$pattern" | grep -v "no-plugin" | head -n1 | cut -d'"' -f4 || true)
+
+    if [ -n "$dl_url" ]; then
+        local tmp_tar
+        tmp_tar="$(mktemp)"
+        echo -e "Descargando paquete oficial: ${CYAN}${dl_url}${RESET}..."
+        if curl -sSL -f -o "$tmp_tar" "$dl_url"; then
+            tar -xzf "$tmp_tar" -C "$cpamc_home"
+            rm -f "$tmp_tar"
+            chmod +x "$cpamc_home/cli-proxy-api" 2>/dev/null || true
+            echo -e "${GREEN}    [✓] Binario oficial CLIProxyAPI instalado en ${cpamc_home}.${RESET}"
+
+            # Iniciar proceso en segundo plano
+            nohup "$cpamc_home/cli-proxy-api" -config "$config_file" > "$cpamc_home/cliproxy.log" 2>&1 &
+            sleep 2
+            TARGET_URL="http://localhost:8317"
+            PROCESS_FOUND=true
+            PROCESS_PORT="8317"
+            return 0
+        fi
+        rm -f "$tmp_tar" 2>/dev/null || true
+    fi
+
+    echo -e "${YELLOW}    [!] No se pudo descargar automáticamente el binario oficial de CPAMC.${RESET}"
+    return 1
+}
+
+# ------------------------------------------------------------------------------
 # 2. ASISTENTE GUIADO DE CONEXIÓN (BOUNDED DISCOVERY / LAN / VPS)
 # ------------------------------------------------------------------------------
 resolve_connectivity() {
@@ -242,31 +359,36 @@ resolve_connectivity() {
     fi
 
     echo -e "${BOLD}¿Dónde está alojado tu servidor CPAMC?${RESET}"
-    echo -e "  ${CYAN}[1]${RESET} Localhost estándar (${GREEN}http://localhost:${DOCKER_PORT:-${PROCESS_PORT:-8317}}${RESET})"
-    echo -e "  ${CYAN}[2]${RESET} Servidor en Red Local / LAN (${YELLOW}ej: http://192.168.1.100:8317${RESET})"
-    echo -e "  ${CYAN}[3]${RESET} VPS / Servidor Remoto en la Nube (${MAGENTA}ej: https://vps.midominio.com:8317${RESET})"
-    echo -e "  ${CYAN}[4]${RESET} Escribir URL personalizada manualmente"
+    echo -e "  ${CYAN}[1]${RESET} Descargar e instalar CPAMC oficial automáticamente (${GREEN}router-for-me/CLIProxyAPI${RESET})"
+    echo -e "  ${CYAN}[2]${RESET} Localhost estándar (${GREEN}http://localhost:${DOCKER_PORT:-${PROCESS_PORT:-8317}}${RESET})"
+    echo -e "  ${CYAN}[3]${RESET} Servidor en Red Local / LAN (${YELLOW}ej: http://192.168.1.100:8317${RESET})"
+    echo -e "  ${CYAN}[4]${RESET} VPS / Servidor Remoto en la Nube (${MAGENTA}ej: https://vps.midominio.com:8317${RESET})"
+    echo -e "  ${CYAN}[5]${RESET} Modo solo cliente (instalar únicamente extensión de Gentle-Shell)"
+    echo -e "  ${CYAN}[6]${RESET} Escribir URL personalizada manualmente"
     echo ""
 
     local choice=""
     if [ "$NON_INTERACTIVE" = true ]; then
         choice="1"
     else
-        read -r -p "👉 Selecciona una opción [1-4] (por defecto: 1): " choice
+        read -r -p "👉 Selecciona una opción [1-6] (por defecto: 1): " choice
         choice="${choice:-1}"
     fi
 
     case "$choice" in
         1)
-            TARGET_URL="http://localhost:${DOCKER_PORT:-${PROCESS_PORT:-8317}}"
+            bootstrap_official_cpamc || TARGET_URL="http://localhost:8317"
             ;;
         2)
+            TARGET_URL="http://localhost:${DOCKER_PORT:-${PROCESS_PORT:-8317}}"
+            ;;
+        3)
             echo ""
             echo -e "${YELLOW}📌 Ejemplo para Red Local:${RESET} http://192.168.1.100:8317"
             read -r -p "✍️  Ingresa la IP y puerto de tu CPAMC: " input_url
             TARGET_URL="${input_url:-http://192.168.1.100:8317}"
             ;;
-        3)
+        4)
             echo ""
             echo -e "${MAGENTA}📌 Ejemplos para VPS / Remoto:${RESET}"
             echo -e "   - https://cpamc.midominio.com"
@@ -274,12 +396,17 @@ resolve_connectivity() {
             read -r -p "✍️  Ingresa la URL pública o dominio de tu VPS: " input_url
             TARGET_URL="${input_url:-https://vps.midominio.com:8317}"
             ;;
-        4)
+        5)
+            INSTALL_EXTENSION_ONLY=true
+            read -r -p "✍️  Ingresa la URL de tu CPAMC remoto: " input_url
+            TARGET_URL="${input_url:-http://localhost:8317}"
+            ;;
+        6)
             read -r -p "✍️  Ingresa la URL completa de CPAMC: " input_url
             TARGET_URL="${input_url:-http://localhost:8317}"
             ;;
         *)
-            TARGET_URL="http://localhost:${DOCKER_PORT:-${PROCESS_PORT:-8317}}"
+            bootstrap_official_cpamc || TARGET_URL="http://localhost:8317"
             ;;
     esac
 

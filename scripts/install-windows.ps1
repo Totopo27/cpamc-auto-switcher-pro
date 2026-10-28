@@ -364,6 +364,92 @@ if (-not $ExtensionOnly) {
             Write-Warning "No se pudo obtener la biblioteca DLL precompilada para Windows."
             Write-Warning "Si estás usando Docker Desktop en Windows, CPAMC usa el contenedor Linux oficial con .so."
         }
+    } elseif (-not $ExtensionOnly) {
+        Write-Host "`n  ⚠️ No se detectó CPAMC (CLIProxyAPI) en ejecución en este equipo." -ForegroundColor Yellow
+        $installChoice = Read-Host "  ¿Deseas descargar e instalar automáticamente CLIProxyAPI oficial para Windows (router-for-me/CLIProxyAPI)? [S/n]"
+        if ([string]::IsNullOrWhiteSpace($installChoice) -or $installChoice -match "^[sSyY]") {
+            $cpamcHome = Join-Path $env:USERPROFILE "cliproxyapi"
+            $pluginsDir = Join-Path $cpamcHome "plugins"
+            if (-not (Test-Path $pluginsDir)) {
+                New-Item -ItemType Directory -Force -Path $pluginsDir | Out-Null
+            }
+
+            Write-Host "  ⚡ Descargando paquete oficial CLIProxyAPI para Windows..." -ForegroundColor Cyan
+            $releaseApi = "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/latest"
+            $dlUrl = $null
+            try {
+                $releaseJson = Invoke-RestMethod -Uri $releaseApi -Headers @{ "User-Agent" = "AutoSwitcherPro-Installer" } -TimeoutSec 5
+                $asset = $releaseJson.assets | Where-Object { $_.name -match "CLIProxyAPI_.*_windows_amd64\.zip" } | Select-Object -First 1
+                if ($asset) { $dlUrl = $asset.browser_download_url }
+            } catch {}
+
+            if (-not $dlUrl) {
+                $dlUrl = "https://github.com/router-for-me/CLIProxyAPI/releases/latest/download/CLIProxyAPI_8.0.46_windows_amd64.zip"
+            }
+
+            $zipPath = Join-Path $env:TEMP "cliproxyapi-windows.zip"
+            try {
+                Invoke-WebRequest -Uri $dlUrl -OutFile $zipPath -ErrorAction Stop
+                Expand-Archive -Path $zipPath -DestinationPath $cpamcHome -Force
+                Remove-Item -Force -Path $zipPath -ErrorAction SilentlyContinue
+                Write-Host "  ✓ Servidor oficial CLIProxyAPI extraído en: $cpamcHome" -ForegroundColor Green
+
+                # Instalar DLL del plugin
+                $targetDll = Join-Path $pluginsDir "auto-switcher-pro-windows-amd64.dll"
+                if ($binSource -and (Test-Path $binSource)) {
+                    Copy-Item -Force -Path $binSource -Destination $targetDll
+                    Write-Host "  ✓ auto-switcher-pro-windows-amd64.dll copiada desde paquete local." -ForegroundColor Green
+                } else {
+                    $dlDll = "https://github.com/WiloxDev/cpamc-auto-switcher-pro/releases/latest/download/auto-switcher-pro-windows-amd64.dll"
+                    try {
+                        Invoke-WebRequest -Uri $dlDll -OutFile $targetDll -ErrorAction Stop
+                        Write-Host "  ✓ auto-switcher-pro-windows-amd64.dll descargada exitosamente." -ForegroundColor Green
+                    } catch {}
+                }
+
+                # Generar Management Key segura
+                $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+                $keyBytes = New-Object byte[] 16
+                $rng.GetBytes($keyBytes)
+                $genKey = [System.BitConverter]::ToString($keyBytes).Replace("-", "").ToLower()
+
+                $Key = $genKey
+                $Url = "http://localhost:8317"
+
+                # Guardar clave en archivo canónico
+                try {
+                    $keyFile = Join-Path $env:USERPROFILE ".cliproxy_management_key"
+                    Set-Content -Path $keyFile -Value $genKey -Encoding UTF8 -Force
+                } catch {}
+
+                # Generar config.yaml inicial con plugins habilitados
+                $configFile = Join-Path $cpamcHome "config.yaml"
+                $initialConfig = @"
+server:
+  port: 8317
+api-keys:
+  management-key: "$genKey"
+plugins:
+  enabled: true
+  dir: plugins
+  configs:
+    auto-switcher-pro-windows-amd64:
+      enabled: true
+"@
+                Set-Content -Path $configFile -Value $initialConfig -Encoding UTF8
+                Write-Host "  ✓ config.yaml inicial generado con clave administrativa segura." -ForegroundColor Green
+
+                # Iniciar servidor en segundo plano
+                $exePath = Join-Path $cpamcHome "cli-proxy-api.exe"
+                if (Test-Path $exePath) {
+                    Start-Process -FilePath $exePath -ArgumentList "-config config.yaml" -WorkingDirectory $cpamcHome -WindowStyle Minimized
+                    Write-Host "  ✓ CLIProxyAPI iniciado en segundo plano (puerto :8317)." -ForegroundColor Green
+                    $pluginInstalled = $true
+                }
+            } catch {
+                Write-Warning "Fallo al autodesplegar CPAMC en Windows: $_"
+            }
+        }
     } else {
         Write-Host "  ℹ️  No se detectó un CLIProxyAPI nativo en ejecución ni en rutas habituales." -ForegroundColor Gray
         Write-Host "     Si tu CPAMC corre en Docker (recomendado) o en un servidor remoto," -ForegroundColor Gray
