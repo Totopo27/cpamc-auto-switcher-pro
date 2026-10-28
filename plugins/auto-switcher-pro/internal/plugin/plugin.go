@@ -264,6 +264,21 @@ func HandlePluginMethod(method string, request []byte) ([]byte, error) {
 					"Path":        incidentsRoutePath,
 					"Description": "Registra un incidente de disyuntor anti-bucle mitigado desde las extensiones",
 				},
+				{
+					"Method":      http.MethodGet,
+					"Path":        "/auto-switcher-pro/pair",
+					"Description": "Entrega el script interactivo de Magic Pairing para conectar agentes remotos",
+				},
+				{
+					"Method":      http.MethodGet,
+					"Path":        "/auto-switcher-pro/extension/install.sh",
+					"Description": "Entrega el script instalador para extensiones de agentes",
+				},
+				{
+					"Method":      http.MethodGet,
+					"Path":        "/auto-switcher-pro/extension/detect",
+					"Description": "Detecta los agentes y arneses instalados en el sistema",
+				},
 			},
 			"resources": []map[string]any{
 				{

@@ -456,9 +456,27 @@ install_extension() {
     # Detectar agentes instalados
     local target_agent_dirs=()
 
+    # Detección de Gentle-Shell según configuración activa (~/.gentle-shell/config.json)
+    if [ -f "$HOME/.gentle-shell/config.json" ]; then
+        local configured_home
+        configured_home=$(grep -o '"home": *"[^"]*"' "$HOME/.gentle-shell/config.json" | head -n1 | cut -d'"' -f4 || true)
+        if [ -n "$configured_home" ] && [ -d "$configured_home" ]; then
+            target_agent_dirs+=("$configured_home")
+            echo -e "Detectado agente: ${GREEN}Gentle Shell (configurado)${RESET} (${configured_home})"
+        fi
+    fi
+
+    if [ -d "$HOME/.pi/gentle-shell" ]; then
+        if [[ ! " ${target_agent_dirs[*]} " =~ " $HOME/.pi/gentle-shell " ]]; then
+            target_agent_dirs+=("$HOME/.pi/gentle-shell")
+            echo -e "Detectado agente: ${GREEN}Gentle Shell${RESET} (~/.pi/gentle-shell)"
+        fi
+    fi
     if [ -d "$HOME/.gentle-shell/agent" ]; then
-        target_agent_dirs+=("$HOME/.gentle-shell/agent")
-        echo -e "Detectado agente: ${GREEN}Gentle Shell${RESET} (~/.gentle-shell/agent)"
+        if [[ ! " ${target_agent_dirs[*]} " =~ " $HOME/.gentle-shell/agent " ]]; then
+            target_agent_dirs+=("$HOME/.gentle-shell/agent")
+            echo -e "Detectado agente: ${GREEN}Gentle Shell (legado/agent)${RESET} (~/.gentle-shell/agent)"
+        fi
     fi
     if [ -d "$HOME/.pi/agent" ]; then
         target_agent_dirs+=("$HOME/.pi/agent")
