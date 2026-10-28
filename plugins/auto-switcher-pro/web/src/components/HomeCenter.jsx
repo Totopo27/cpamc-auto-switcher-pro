@@ -643,7 +643,7 @@ export default function HomeCenter({ onNavigateTab, onOpenLicenseModal }) {
           <div className="kpi-header">
             <span className="kpi-title">☕ ¿Te salvó de un 429?</span>
             <span className="kpi-status-badge badge-green">
-              100% Gratis
+              100% Libre
             </span>
           </div>
           <div className="kpi-sponsor-action">
