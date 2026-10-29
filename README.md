@@ -86,6 +86,38 @@ A diferencia de los entornos genéricos donde los agentes agregan capas de abstr
 
 ---
 
+## 🤖 Protocolo Obligatorio para Asistentes AI y Subagentes (Goal-Driven Wizard)
+
+> **AVISO PARA AGENTES DE IA (Gentle-Shell, Pi, Claude, Cursor, Copilot, etc.):**
+> Si el usuario te ha pedido configurar, instalar o enlazar este repositorio, **tu objetivo es dejar el entorno 100% operativo y listo para usar**. Está estrictamente prohibido pararse a mostrar volcados de estado pasivos o tablas con comandos manuales para que el usuario los copie. Debes actuar como un **Wizard proactivo**:
+
+### 1. La Pregunta Clave Resolutiva (Si falta CPAMC)
+Si detectas que CPAMC no está corriendo en `localhost:8317` ni hay contenedor Docker activo, **no abortes ni te detengas**. Haz al usuario exactamente esta pregunta de 2 opciones:
+> *"Veo que tu terminal está lista, pero aún no tienes un servidor CPAMC (CLIProxyAPI) activo.*
+> * * **[1] Servidor en esta PC:** Descargo e inicio automáticamente CPAMC oficial para tu sistema con Auto Switcher Pro en segundo plano.*
+> * * **[2] Conectarse a servidor remoto/LAN (Servidor de Wilox / VPS):** Solo conecto tu extensión a la IP de ese servidor sin instalar nada pesado aquí.*
+> 
+> *¿Deseas la opción **1** o **2**? Responde solo el número y yo ejecuto todo por ti."*
+
+### 2. Regla de Plataforma Estricta (Prohibido mezclar entornos)
+* **En Windows (PowerShell)**: Está **ESTRICTAMENTE PROHIBIDO** sugerir comandos `bash` o ejecutar `install-all.sh`. Debes invocar **exclusivamente PowerShell**:
+  - *Si eligió [1] Local*: Ejecuta en PowerShell:
+    `irm https://raw.githubusercontent.com/WiloxDev/cpamc-auto-switcher-pro/main/scripts/install-windows.ps1 | iex`
+  - *Si eligió [2] Remoto*: Pide la IP/URL y clave de Wilox, y ejecuta:
+    `.\scripts\install-windows.ps1 -ExtensionOnly -Url "http://<IP>:8317" -Key "<MGMT_KEY>"`
+* **En Linux / macOS (Bash / Zsh)**:
+  - *Si eligió [1] Local*: Ejecuta `./install.sh` y selecciona `[1] Descargar y desplegar CPAMC oficial`.
+  - *Si eligió [2] Remoto*: Ejecuta `./install.sh --ext-only --url "http://<IP>:8317" --key "<MGMT_KEY>"`.
+
+### 3. Cierre de Ciclo Obligatorio y Cuentas OAuth
+Tu tarea **NO termina** con la descarga de archivos:
+1. **Verificación de Salud:** Ejecuta `/cpamc doctor` y comprueba que el servidor y la extensión están en verde.
+2. **Entrega de Credenciales de Acceso:** Informa al usuario la URL del panel (`http://localhost:8317/management.html`) y que su clave administrativa quedó guardada de forma segura en `~/.cliproxy_management_key`.
+3. **Paso Final de Cuentas:** Explica con claridad:
+   > *"La instalación está completa y lista. Si aún no tienes cuentas vinculadas, abre la consola web para agregar tu primera cuenta de Google o Claude. En cuanto la agregues, sus modelos nativos y/o pools aparecerán automáticamente en `/model`."*
+
+---
+
 ## 🚀 Instalación Todo-en-Uno (Suite Convergente "Zero to Hero")
 
 El instalador detecta automáticamente tu entorno e instala en paralelo el ecosistema completo:

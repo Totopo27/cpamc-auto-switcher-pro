@@ -136,19 +136,32 @@ if ($agentTargets.Count -eq 0) {
 $extInstalledCount = 0
 $timestamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss")
 
+# Directorio seguro de respaldos FUERA de extensions/ para evitar colisiones de atajos (Ctrl+Alt+X / Ctrl+Alt+P)
+$backupRootDir = Join-Path $env:USERPROFILE ".gentle-shell\backups\extensions"
+if (-not (Test-Path $backupRootDir)) {
+    New-Item -ItemType Directory -Force -Path $backupRootDir | Out-Null
+}
+
 foreach ($extFolder in $agentTargets) {
     try {
         if (-not (Test-Path $extFolder)) {
             New-Item -ItemType Directory -Force -Path $extFolder | Out-Null
         }
 
+        # Auto-limpieza proactiva: Evacuar cualquier carpeta .bak* o .old* residual que cause colisiones en Gentle-Shell
+        Get-ChildItem -Path $extFolder -Directory -Filter "cpamc-auto-switcher.bak*" -ErrorAction SilentlyContinue | ForEach-Object {
+            $evacDest = Join-Path $backupRootDir $_.Name
+            Move-Item -Force -Path $_.FullName -Destination $evacDest -ErrorAction SilentlyContinue
+            Write-Host "  🧹 Respaldo duplicado evacuado automáticamente a: $evacDest" -ForegroundColor DarkGray
+        }
+
         $dest = Join-Path $extFolder "cpamc-auto-switcher"
         
-        # Respaldo seguro si ya existía una versión anterior
+        # Respaldo seguro si ya existía una versión anterior (SIEMPRE fuera de extensions/)
         if (Test-Path $dest) {
-            $backupDest = Join-Path $extFolder "cpamc-auto-switcher.bak-$timestamp"
+            $backupDest = Join-Path $backupRootDir "cpamc-auto-switcher.bak-$timestamp"
             Copy-Item -Recurse -Force -Path $dest -Destination $backupDest
-            Write-Host "  📦 Versión previa respaldada en: $backupDest" -ForegroundColor DarkGray
+            Write-Host "  📦 Versión previa respaldada de forma segura en: $backupDest" -ForegroundColor DarkGray
             Remove-Item -Recurse -Force -Path $dest
         }
 
@@ -407,28 +420,40 @@ if (-not $ExtensionOnly) {
                     } catch {}
                 }
 
-                # Generar Management Key segura
+                # Generar Claves Criptográficas Seguras (Dual: Admin + Consumo API)
                 $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-                $keyBytes = New-Object byte[] 16
-                $rng.GetBytes($keyBytes)
-                $genKey = [System.BitConverter]::ToString($keyBytes).Replace("-", "").ToLower()
+                
+                # 1. Management Secret Key (para /management.html y /v8/management/*)
+                $mgmtBytes = New-Object byte[] 16
+                $rng.GetBytes($mgmtBytes)
+                $genMgmtKey = [System.BitConverter]::ToString($mgmtBytes).Replace("-", "").ToLower()
 
-                $Key = $genKey
+                # 2. Client API Key (para consumo de modelos en /v1/models y Gentle-Shell)
+                $apiBytes = New-Object byte[] 16
+                $rng.GetBytes($apiBytes)
+                $genApiKey = "sk-" + [System.BitConverter]::ToString($apiBytes).Replace("-", "").ToLower()
+
+                $Key = $genMgmtKey
                 $Url = "http://localhost:8317"
 
-                # Guardar clave en archivo canónico
+                # Guardar ambas claves en archivos canónicos locales seguros
                 try {
-                    $keyFile = Join-Path $env:USERPROFILE ".cliproxy_management_key"
-                    Set-Content -Path $keyFile -Value $genKey -Encoding UTF8 -Force
+                    $mgmtKeyFile = Join-Path $env:USERPROFILE ".cliproxy_management_key"
+                    Set-Content -Path $mgmtKeyFile -Value $genMgmtKey -Encoding UTF8 -Force
+                    
+                    $apiKeyFile = Join-Path $env:USERPROFILE ".cliproxy_api_key"
+                    Set-Content -Path $apiKeyFile -Value $genApiKey -Encoding UTF8 -Force
                 } catch {}
 
-                # Generar config.yaml inicial con plugins habilitados
+                # Generar config.yaml canónico compatible con CLIProxyAPI v8 oficial (router-for-me)
                 $configFile = Join-Path $cpamcHome "config.yaml"
                 $initialConfig = @"
 server:
   port: 8317
+management:
+  secret-key: "$genMgmtKey"
 api-keys:
-  management-key: "$genKey"
+  - "$genApiKey"
 plugins:
   enabled: true
   dir: plugins
@@ -437,7 +462,7 @@ plugins:
       enabled: true
 "@
                 Set-Content -Path $configFile -Value $initialConfig -Encoding UTF8
-                Write-Host "  ✓ config.yaml inicial generado con clave administrativa segura." -ForegroundColor Green
+                Write-Host "  ✓ config.yaml inicial generado con claves de administración (v8) y API separadas." -ForegroundColor Green
 
                 # Iniciar servidor en segundo plano
                 $exePath = Join-Path $cpamcHome "cli-proxy-api.exe"
@@ -445,6 +470,25 @@ plugins:
                     Start-Process -FilePath $exePath -ArgumentList "-config config.yaml" -WorkingDirectory $cpamcHome -WindowStyle Minimized
                     Write-Host "  ✓ CLIProxyAPI iniciado en segundo plano (puerto :8317)." -ForegroundColor Green
                     $pluginInstalled = $true
+
+                    # Persistencia opcional y reversible en shell:startup (sin requerir admin)
+                    try {
+                        $startupFolder = [Environment]::GetFolderPath("Startup")
+                        if ($startupFolder -and (Test-Path $startupFolder)) {
+                            $shortcutPath = Join-Path $startupFolder "CLIProxyAPI.lnk"
+                            $wsh = New-Object -ComObject WScript.Shell
+                            $sc = $wsh.CreateShortcut($shortcutPath)
+                            $sc.TargetPath = $exePath
+                            $sc.Arguments = "-config config.yaml"
+                            $sc.WorkingDirectory = $cpamcHome
+                            $sc.WindowStyle = 7 # Minimized
+                            $sc.Description = "CLIProxyAPI Server Background Startup"
+                            $sc.Save()
+                            Write-Host "  ✓ Acceso directo creado en Inicio para arranque automático al iniciar sesión." -ForegroundColor Green
+                        }
+                    } catch {
+                        Write-Warning "No se pudo configurar persistencia en Startup: $_"
+                    }
                 }
             } catch {
                 Write-Warning "Fallo al autodesplegar CPAMC en Windows: $_"
@@ -498,6 +542,14 @@ if (-not [string]::IsNullOrWhiteSpace($Key)) {
     Write-Host "🔑 CLIPROXYAPI_MANAGEMENT_KEY configurada con éxito." -ForegroundColor Cyan
 }
 
+# Configuración de CLIPROXYAPI_API_KEY para consumo de modelos en /v1/models
+$currentApiKey = [Environment]::GetEnvironmentVariable("CLIPROXYAPI_API_KEY", "User")
+if ([string]::IsNullOrWhiteSpace($currentApiKey) -and -not [string]::IsNullOrWhiteSpace($genApiKey)) {
+    [Environment]::SetEnvironmentVariable("CLIPROXYAPI_API_KEY", $genApiKey, "User")
+    $env:CLIPROXYAPI_API_KEY = $genApiKey
+    Write-Host "🔑 CLIPROXYAPI_API_KEY configurada con éxito para consumo de modelos." -ForegroundColor Cyan
+}
+
 # ------------------------------------------------------------------------------
 # 3.1. PARCHEO IDEMPOTENTE DE GENTLE-SHELL LAYOUT EN WINDOWS
 # ------------------------------------------------------------------------------
@@ -548,6 +600,22 @@ if ($extInstalledCount -gt 0 -and ($pluginInstalled -or $ExtensionOnly)) {
     Write-Host "⚠️  Instalación finalizada con advertencias (ver registros superiores)." -ForegroundColor Yellow
 }
 Write-Host "==========================================================" -ForegroundColor Green
-Write-Host "Para comenzar en tu terminal:"
-Write-Host "  gentle-shell" -ForegroundColor Yellow
-Write-Host "Los pools aparecerán automáticamente al consultar /model."
+Write-Host "🌐 Endpoint CPAMC activo: $defaultBase" -ForegroundColor Cyan
+$savedKeyFile = Join-Path $env:USERPROFILE ".cliproxy_management_key"
+if (Test-Path $savedKeyFile) {
+    Write-Host "🔑 Clave de Administración: Guardada en tu archivo local seguro:" -ForegroundColor Green
+    Write-Host "   $savedKeyFile" -ForegroundColor Yellow
+}
+$savedApiKeyFile = Join-Path $env:USERPROFILE ".cliproxy_api_key"
+if (Test-Path $savedApiKeyFile) {
+    Write-Host "🔑 Clave de Consumo API (Modelos): Guardada en tu archivo local seguro:" -ForegroundColor Green
+    Write-Host "   $savedApiKeyFile" -ForegroundColor Yellow
+}
+
+Write-Host "`n🚀 PASOS PARA EMPEZAR:" -ForegroundColor White
+Write-Host "  1. Abre la consola web de CPAMC para vincular tu primera cuenta:" -ForegroundColor Gray
+Write-Host "     http://localhost:8317/management.html" -ForegroundColor Cyan
+Write-Host "     (Ingresa tu Management Key si la consola te la solicita)" -ForegroundColor DarkGray
+Write-Host "  2. Abre una NUEVA terminal de PowerShell para heredar las variables y ejecuta:" -ForegroundColor Gray
+Write-Host "     gentle-shell" -ForegroundColor Yellow
+Write-Host "  3. Escribe /model para seleccionar tus modelos balanceados." -ForegroundColor Gray

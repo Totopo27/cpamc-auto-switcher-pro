@@ -187,23 +187,35 @@ bootstrap_official_cpamc() {
     mkdir -p "$cpamc_home/plugins" 2>/dev/null || true
     mkdir -p "$HOME/.cli-proxy-api" 2>/dev/null || true
 
-    # 1. Generar Management Key criptográfica aleatoria para esta máquina
-    local gen_key=""
+    # 1. Generar Claves Criptográficas Seguras (Dual: Admin v8 + Consumo API)
+    local gen_mgmt_key=""
+    local gen_api_key=""
     if command -v openssl >/dev/null 2>&1; then
-        gen_key=$(openssl rand -hex 16)
+        gen_mgmt_key=$(openssl rand -hex 16)
+        gen_api_key="sk-$(openssl rand -hex 16)"
     else
-        gen_key=$(head -c 16 /dev/urandom 2>/dev/null | od -An -tx1 | tr -d ' \n' || echo "cpa_mgmt_$(date +%s)")
+        gen_mgmt_key=$(head -c 16 /dev/urandom 2>/dev/null | od -An -tx1 | tr -d ' \n' || echo "cpa_mgmt_$(date +%s)")
+        gen_api_key="sk-$(head -c 16 /dev/urandom 2>/dev/null | od -An -tx1 | tr -d ' \n' || echo "cpa_api_$(date +%s)")"
     fi
-    TARGET_KEY="${TARGET_KEY:-$gen_key}"
+    TARGET_KEY="${TARGET_KEY:-$gen_mgmt_key}"
+    TARGET_API_KEY="${TARGET_API_KEY:-$gen_api_key}"
 
-    # 2. Generar config.yaml inicial con plugins y clave si no existe
+    # Guardar localmente ambas claves en archivos protegidos
+    echo "$TARGET_KEY" > "$HOME/.cliproxy_management_key" 2>/dev/null || true
+    chmod 600 "$HOME/.cliproxy_management_key" 2>/dev/null || true
+    echo "$TARGET_API_KEY" > "$HOME/.cliproxy_api_key" 2>/dev/null || true
+    chmod 600 "$HOME/.cliproxy_api_key" 2>/dev/null || true
+
+    # 2. Generar config.yaml inicial con plugins y claves canónicas de CPAMC v8 si no existe
     local config_file="$cpamc_home/config.yaml"
     if [ ! -f "$config_file" ]; then
         cat << EOC > "$config_file"
 server:
   port: 8317
+management:
+  secret-key: "${TARGET_KEY}"
 api-keys:
-  management-key: "${TARGET_KEY}"
+  - "${TARGET_API_KEY}"
 plugins:
   enabled: true
   dir: plugins
@@ -212,7 +224,7 @@ plugins:
       enabled: true
 EOC
         chmod 600 "$config_file" 2>/dev/null || true
-        echo -e "${GREEN}    [✓] Archivo config.yaml inicial generado con clave administrativa segura.${RESET}"
+        echo -e "${GREEN}    [✓] Archivo config.yaml inicial generado con claves de administración (v8) y API separadas.${RESET}"
     fi
 
     # 3. Copiar plugin Auto Switcher Pro (.so)
@@ -647,11 +659,26 @@ install_extension() {
 
     # Instalar en cada agente detectado
     for agent_home in "${target_agent_dirs[@]}"; do
-        local ext_dest="${agent_home}/extensions/cpamc-auto-switcher"
-        mkdir -p "${agent_home}/extensions"
+        local ext_dir="${agent_home}/extensions"
+        mkdir -p "$ext_dir"
+
+        # Auto-limpieza proactiva de respaldos residuales que Gentle-Shell cargue por colisión
+        local backup_dir="${agent_home}/backups/extensions"
+        mkdir -p "$backup_dir"
+        find "$ext_dir" -maxdepth 1 -type d -name "cpamc-auto-switcher.bak*" 2>/dev/null | while read -r old_bak; do
+            if [ -d "$old_bak" ]; then
+                mv "$old_bak" "$backup_dir/" 2>/dev/null || true
+                echo -e "    ${YELLOW}🧹 Respaldo duplicado evacuado automáticamente a: ${backup_dir}/${RESET}"
+            fi
+        done
+
+        local ext_dest="${ext_dir}/cpamc-auto-switcher"
 
         if [ -d "$local_ext_src" ]; then
-            rm -rf "$ext_dest"
+            if [ -d "$ext_dest" ]; then
+                local ts=$(date +%Y%m%d-%H%M%S)
+                mv "$ext_dest" "${backup_dir}/cpamc-auto-switcher.bak-${ts}" 2>/dev/null || rm -rf "$ext_dest"
+            fi
             cp -r "$local_ext_src" "$ext_dest"
             echo -e "${GREEN}    [✓] Extensión instalada en: ${ext_dest}${RESET}"
         else
@@ -732,16 +759,31 @@ print_summary() {
     echo -e "\n${GREEN}================================================================${RESET}"
     echo -e "${BOLD}🎉 ¡INSTALACIÓN COMPLETADA EXITOSAMENTE!${RESET}"
     echo -e "${GREEN}================================================================${RESET}"
-    echo -e "  🌐 Endpoint CPAMC activo:  ${CYAN}${BOLD}${TARGET_URL}${RESET}"
-    [ -n "$TARGET_KEY" ] && echo -e "  🔑 Autenticación:           ${GREEN}Configurada${RESET}"
-    echo -e "  🧩 Extensión de Agente:    ${GREEN}Enlazada y lista${RESET}"
+    echo -e "  🌐 Endpoint CPAMC activo:   ${CYAN}${BOLD}${TARGET_URL}${RESET}"
+    if [ -n "$TARGET_KEY" ]; then
+        echo -e "  🔑 Clave de Administración: ${GREEN}Activa${RESET}"
+        if [ -f "$HOME/.cliproxy_management_key" ]; then
+            echo -e "     ↳ Guardada localmente en: ${YELLOW}$HOME/.cliproxy_management_key${RESET} (chmod 600)"
+        fi
+    fi
+    if [ -f "$HOME/.cliproxy_api_key" ]; then
+        echo -e "  🔑 Clave de Consumo (Modelos): ${GREEN}Activa${RESET}"
+        echo -e "     ↳ Guardada localmente en: ${YELLOW}$HOME/.cliproxy_api_key${RESET} (chmod 600)"
+    fi
+    echo -e "  🧩 Extensión de Agente:     ${GREEN}Enlazada y lista${RESET}"
     echo -e "----------------------------------------------------------------"
-    echo -e "${BOLD}🚀 ¿CÓMO EMPEZAR AHORA?${RESET}"
-    echo -e "  1. Abre tu terminal y ejecuta tu agente:"
+    echo -e "${BOLD}🚀 PASO FINAL PARA ACTIVAR TUS MODELOS:${RESET}"
+    echo -e "  1. Abre la consola web de CPAMC en tu navegador:"
+    echo -e "     ${CYAN}${BOLD}${TARGET_URL}/management.html${RESET}"
+    if [ -n "$TARGET_KEY" ]; then
+        echo -e "     (Ingresa tu Management Key si la consola te la solicita)"
+    fi
+    echo -e "  2. Vincula tu primera cuenta de IA (Google Antigravity, Claude, OpenAI, etc.)."
+    echo -e "     ↳ ${ITALIC}Nota: Si aún no tienes cuentas vinculadas, la instalación ya está lista.${RESET}"
+    echo -e "       ${ITALIC}En cuanto agregues una cuenta nativa o crees un pool, aparecerá en /model.${RESET}"
+    echo -e "  3. Abre una NUEVA ventana de terminal y ejecuta tu agente:"
     echo -e "     ${CYAN}gentle-shell${RESET}   o   ${CYAN}pi${RESET}"
-    echo -e "  2. Usa ${BOLD}/model${RESET} o ${BOLD}/cpamc-model${RESET} para ver tus modelos y pools activos."
-    echo -e "  3. Abre el panel de administración web en tu navegador:"
-    echo -e "     ${CYAN}${TARGET_URL}/management.html#/plugin-pages/auto-switcher-pro-linux-amd64/home${RESET}"
+    echo -e "  4. Escribe ${BOLD}/model${RESET} para empezar a trabajar con tus modelos balanceados."
     echo -e "${GREEN}================================================================${RESET}\n"
 }
 

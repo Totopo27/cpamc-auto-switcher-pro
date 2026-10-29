@@ -243,6 +243,41 @@ async function executeAutoFix(ctx: ExtensionContext): Promise<void> {
 	if (ctx.hasUI) {
 		ctx.ui.notify?.("⚡ Ejecutando autoreparación y refresco de estado...", "info");
 	}
+	
+	// 1. Evacuación automática de respaldos duplicados (*.bak*) que causan colisión de atajos
+	try {
+		const fs = await import("fs");
+		const path = await import("path");
+		const os = await import("os");
+
+		const agentExtRoots = [
+			path.join(os.homedir(), ".gentle-shell", "agent", "extensions"),
+			path.join(os.homedir(), ".pi", "agent", "extensions"),
+			path.join(os.homedir(), ".pi", "agent-wilox", "extensions"),
+		];
+
+		const backupRootDir = path.join(os.homedir(), ".gentle-shell", "backups", "extensions");
+		if (!fs.existsSync(backupRootDir)) {
+			fs.mkdirSync(backupRootDir, { recursive: true });
+		}
+
+		for (const root of agentExtRoots) {
+			if (fs.existsSync(root)) {
+				const entries = fs.readdirSync(root);
+				for (const entry of entries) {
+					if (entry.startsWith("cpamc-auto-switcher.bak")) {
+						const src = path.join(root, entry);
+						const dst = path.join(backupRootDir, entry);
+						try {
+							fs.renameSync(src, dst);
+							console.log(`[Doctor] 🧹 Respaldo duplicado evacuado: ${entry} -> backups/`);
+						} catch {}
+					}
+				}
+			}
+		}
+	} catch {}
+
 	try {
 		await ctx.modelRegistry?.refresh?.();
 	} catch {}
@@ -251,6 +286,6 @@ async function executeAutoFix(ctx: ExtensionContext): Promise<void> {
 		tui?.requestRender?.();
 	} catch {}
 	if (ctx.hasUI) {
-		ctx.ui.notify?.("✅ Autoreparación completada. Ejecuta /cpamc doctor para verificar.", "info");
+		ctx.ui.notify?.("✅ Autoreparación completada (respaldos purgados y catálogo refrescado).", "info");
 	}
 }
