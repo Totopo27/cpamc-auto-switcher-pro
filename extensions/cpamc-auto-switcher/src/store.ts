@@ -462,6 +462,21 @@ export function classifyModel(modelId: string, provider: string): ModelPoolClass
 		trimmed = trimmed.slice(12);
 	}
 
+	// Manejo específico del modelo informativo cuando no hay cuentas vinculadas aún
+	if (trimmed === "sin-cuentas-vinculadas" || trimmed.includes("sin-cuentas")) {
+		return {
+			isCpamc: true,
+			prefix: "",
+			isLeader: false,
+			isReserve: false,
+			roleIcon: "⚠️ ",
+			familyIcon: "⚠️ ",
+			familyLabel: "Sin Cuentas",
+			canonicalModelId: trimmed,
+			poolBase: "",
+		};
+	}
+
 	// Reconocimiento directo de Identificador Limpio de Pool Canónico (p. ej. Pool-01-gemini)
 	if (/^pool-\d+-/i.test(trimmed)) {
 		let familyIcon = "✨ ";

@@ -28,7 +28,7 @@ export async function resolve(specifier, context, nextResolve) {
 
 register("data:text/javascript," + encodeURIComponent(loaderCode));
 
-const { isCleanIncludedModel, buildPoolLabelMap, reconcileActivePoolFacades, initDynamicProvider, resolveManagementKeyWithDiagnostics, resolveCandidateBaseUrls, resolveCpamcBaseUrl } = await import("./provider.js");
+const { isCleanIncludedModel, buildPoolLabelMap, reconcileActivePoolFacades, initDynamicProvider, resolveManagementKeyWithDiagnostics, resolveCandidateBaseUrls, resolveCpamcBaseUrl, resolveCpamcSettings, buildPendingAccountsPlaceholderModel } = await import("./provider.js");
 
 describe("Dynamic Provider Filtering & Granular Coexistence", () => {
     it("evaluates universal base URL resolution cascade (env, custom port, fallbacks)", () => {
@@ -212,6 +212,23 @@ describe("Dynamic Provider Filtering & Granular Coexistence", () => {
                 delete process.env.CLIPROXYAPI_MANAGEMENT_KEY;
             }
         }
+    });
+
+    it("resolves cpamc settings and integrates seamlessly with candidate base URLs", () => {
+        const settings = resolveCpamcSettings();
+        assert.equal(typeof settings, "object");
+        // Verify resolveCandidateBaseUrls incorporates settings if present
+        const urls = resolveCandidateBaseUrls();
+        assert.ok(Array.isArray(urls));
+        assert.ok(urls.length > 0);
+    });
+
+    it("builds pending accounts placeholder model when 0 accounts exist on an active server", () => {
+        const placeholder = buildPendingAccountsPlaceholderModel("http://localhost:8317");
+        assert.equal(placeholder.id, "sin-cuentas-vinculadas");
+        assert.ok(placeholder.name.includes("Sin cuentas vinculadas"));
+        assert.ok(placeholder.name.includes("http://localhost:8317/management.html"));
+        assert.equal(placeholder.provider, "cpamc");
     });
 });
 

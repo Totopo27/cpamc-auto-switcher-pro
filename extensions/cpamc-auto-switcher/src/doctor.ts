@@ -104,11 +104,19 @@ export async function runDiagnostics(ctx?: ExtensionContext): Promise<DoctorRepo
 		if (res.ok) {
 			const accounts = (await res.json()) as any;
 			const count = Array.isArray(accounts) ? accounts.length : (Array.isArray(accounts?.accounts) ? accounts.accounts.length : 0);
-			checks.push({
-				name: "SQLite WAL & Telemetría",
-				ok: true,
-				detail: `Canal activo (${count} cuentas / rotaciones registradas)`,
-			});
+			if (count > 0) {
+				checks.push({
+					name: "SQLite WAL & Telemetría",
+					ok: true,
+					detail: `Canal activo (${count} cuentas / rotaciones registradas)`,
+				});
+			} else {
+				checks.push({
+					name: "SQLite WAL & Telemetría",
+					ok: true,
+					detail: `Canal activo (0 cuentas vinculadas. Abre ${baseUrl}/management.html para vincular tu primera cuenta)`,
+				});
+			}
 		} else {
 			checks.push({
 				name: "SQLite WAL & Telemetría",

@@ -565,6 +565,13 @@ export default function initCpamcUnifiedExtension(pi: ExtensionAPI): void {
 		try {
 			const cwd = ctx?.cwd;
 			const model = event?.model;
+			if (model?.id === "sin-cuentas-vinculadas") {
+				const baseUrl = resolveCpamcBaseUrl();
+				ctx.ui?.notify?.(
+					`⚠️ CPAMC conectado pero sin cuentas. Abre ${baseUrl}/management.html para vincular tu primera cuenta de Google o Claude.`,
+					"warning",
+				);
+			}
 			if (cwd && model?.id && model?.provider) {
 				saveProjectModel(cwd, model.provider, model.id);
 			}

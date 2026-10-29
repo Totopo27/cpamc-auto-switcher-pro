@@ -295,21 +295,85 @@ function discoverCpamcFromUrlFile(): string | null {
     return null;
 }
 
+export type CpamcSettings = {
+    baseUrl?: string;
+    apiKey?: string;
+    managementKey?: string;
+};
+
+/**
+ * Resuelve la configuración de CPAMC declarada en settings.json del agente activo
+ * (Gentle-Shell, Pi, Wilox-Pi). Proporciona inmunidad ante terminales que no heredaron
+ * las variables de entorno del sistema operativo en caliente.
+ */
+export function resolveCpamcSettings(): CpamcSettings {
+    const home = homedir();
+    const candidates = new Set<string>();
+
+    if (process.env.PI_CODING_AGENT_DIR) {
+        candidates.add(join(process.env.PI_CODING_AGENT_DIR, "settings.json"));
+    }
+    candidates.add(join(home, ".gentle-shell", "agent", "settings.json"));
+    candidates.add(join(home, ".pi", "agent", "settings.json"));
+    candidates.add(join(home, ".pi", "agent-wilox", "settings.json"));
+
+    const piDir = join(home, ".pi");
+    if (existsSync(piDir)) {
+        try {
+            const entries = readdirSync(piDir, { withFileTypes: true });
+            for (const entry of entries) {
+                if (entry.isDirectory() && entry.name.startsWith("agent")) {
+                    candidates.add(join(piDir, entry.name, "settings.json"));
+                }
+            }
+        } catch {}
+    }
+
+    for (const settingsPath of candidates) {
+        try {
+            if (existsSync(settingsPath)) {
+                const raw = readFileSync(settingsPath, "utf-8");
+                const parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === "object") {
+                    const cpamc = (parsed as Record<string, unknown>).cpamc;
+                    if (cpamc && typeof cpamc === "object") {
+                        const rec = cpamc as Record<string, unknown>;
+                        const baseUrl = typeof rec.baseUrl === "string" ? rec.baseUrl.trim() : undefined;
+                        const apiKey = typeof rec.apiKey === "string" ? rec.apiKey.trim() : undefined;
+                        const managementKey = typeof rec.managementKey === "string" ? rec.managementKey.trim() : undefined;
+                        if (baseUrl || apiKey || managementKey) {
+                            return { baseUrl, apiKey, managementKey };
+                        }
+                    }
+                }
+            }
+        } catch {}
+    }
+
+    return {};
+}
+
 /**
  * Cascada universal de URLs base para CPAMC:
  * 1. Variable de entorno explícita (CLIPROXYAPI_BASE_URL / CPAMC_URL)
- * 2. Archivo de enlace persistente (.cliproxy_url / .cpamc_url)
- * 3. Descubrimiento de puerto personalizado en config.yaml local
- * 4. Loopback IPv4 estándar (http://127.0.0.1:8317)
- * 5. Loopback hostname (http://localhost:8317)
- * 6. Entornos de contenedor Docker / WSL (http://host.docker.internal:8317)
- * 7. Puertos alternativos comunes (8080, 8000, 9000)
+ * 2. Configuración en settings.json del agente (cpamc.baseUrl)
+ * 3. Archivo de enlace persistente (.cliproxy_url / .cpamc_url)
+ * 4. Descubrimiento de puerto personalizado en config.yaml local
+ * 5. Loopback IPv4 estándar (http://127.0.0.1:8317)
+ * 6. Loopback hostname (http://localhost:8317)
+ * 7. Entornos de contenedor Docker / WSL (http://host.docker.internal:8317)
+ * 8. Puertos alternativos comunes (8080, 8000, 9000)
  */
 export function resolveCandidateBaseUrls(): string[] {
     const urls = new Set<string>();
     const explicit = (process.env.CLIPROXYAPI_BASE_URL || process.env.CPAMC_URL || "").trim().replace(/\/+$/, "").replace(/\/v1$/, "");
     if (explicit) {
         urls.add(explicit);
+    }
+
+    const settings = resolveCpamcSettings();
+    if (settings.baseUrl) {
+        urls.add(settings.baseUrl.replace(/\/+$/, "").replace(/\/v1$/, ""));
     }
 
     const fileUrl = discoverCpamcFromUrlFile();
@@ -343,10 +407,30 @@ export function resolveCpamcBaseUrl(): string {
 }
 
 function requireApiKey(): string {
-    const apiKey = (process.env.CLIPROXYAPI_API_KEY || "").trim();
+    let apiKey = (process.env.CLIPROXYAPI_API_KEY || "").trim();
+    if (!apiKey) {
+        const settings = resolveCpamcSettings();
+        if (settings.apiKey) {
+            apiKey = settings.apiKey;
+            process.env.CLIPROXYAPI_API_KEY = apiKey;
+        }
+    }
+    if (!apiKey) {
+        const home = homedir();
+        const diskApiKey = join(home, ".cliproxy_api_key");
+        if (existsSync(diskApiKey)) {
+            try {
+                const key = readFileSync(diskApiKey, "utf-8").trim();
+                if (key) {
+                    apiKey = key;
+                    process.env.CLIPROXYAPI_API_KEY = apiKey;
+                }
+            } catch {}
+        }
+    }
     if (!apiKey) {
         throw new Error(
-            "CLIPROXYAPI_API_KEY is not set in the Pi process environment. Export the CLIProxyAPI endpoint API key before starting pi.",
+            "CLIPROXYAPI_API_KEY is not set in the Pi process environment or settings.json. Export the CLIProxyAPI endpoint API key before starting pi.",
         );
     }
     return apiKey;
@@ -606,6 +690,15 @@ export function resolveManagementKeyWithDiagnostics(): ManagementKeyResolution {
                 }
             }
         } catch {}
+    }
+
+    const settings = resolveCpamcSettings();
+    if (settings.managementKey) {
+        return {
+            key: settings.managementKey,
+            source: "disk_agent",
+            warning: "Operando con clave de gestión desde settings.json.",
+        };
     }
 
     const envKey = (process.env.CLIPROXYAPI_MANAGEMENT_KEY || process.env.CLIPROXY_MANAGEMENT_KEY || "").trim();
@@ -1045,6 +1138,22 @@ export function isCleanIncludedModel(id: string, filterData: {
     return true;
 }
 
+export function buildPendingAccountsPlaceholderModel(baseUrl: string) {
+    const cleanUrl = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+    return {
+        id: "sin-cuentas-vinculadas",
+        name: `⚠️ [CPAMC ONLINE] Sin cuentas vinculadas (Abre ${cleanUrl}/management.html)`,
+        provider: PROVIDER_ID,
+        reasoning: false,
+        input: ["text"] as ("text" | "image")[],
+        contextWindow: 128000,
+        maxTokens: 4096,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        description: `El servidor CPAMC está activo y conectado en ${cleanUrl}. Para activar tus modelos y pools, abre la consola web (${cleanUrl}/management.html) y vincula tu primera cuenta de Google o Claude.`,
+        displayName: "⚠️ Sin cuentas vinculadas (Abre panel web)",
+    };
+}
+
 export async function fetchCLIProxyModels(signal?: AbortSignal) {
     const candidateUrls = resolveCandidateBaseUrls();
     const apiKey = requireApiKey();
@@ -1054,6 +1163,7 @@ export async function fetchCLIProxyModels(signal?: AbortSignal) {
     };
 
     let filterData = await fetchAccountPrefixesAndExclusions(undefined, signal);
+    let respondedOkUrl: string | null = null;
 
     // Intentar /v1/models?client_version=1 a través de la cascada universal
     for (const baseUrl of candidateUrls) {
@@ -1066,6 +1176,7 @@ export async function fetchCLIProxyModels(signal?: AbortSignal) {
             });
 
             if (response.ok) {
+                respondedOkUrl = baseUrl;
                 const payload = (await response.json()) as { models?: CPAModel[] };
                 if (Array.isArray(payload.models) && payload.models.length > 0) {
                     const included = payload.models.filter((model) => {
@@ -1081,7 +1192,10 @@ export async function fetchCLIProxyModels(signal?: AbortSignal) {
                         .map((m) => toPiModelFromCPA(m, poolLabels))
                         .filter((model): model is NonNullable<ReturnType<typeof toPiModelFromCPA>> => Boolean(model));
 
-                    return reconcileActivePoolFacades(mappedModels, filterData?.confirmedActivePools);
+                    const reconciled = reconcileActivePoolFacades(mappedModels, filterData?.confirmedActivePools);
+                    if (reconciled.length > 0) {
+                        return reconciled;
+                    }
                 }
             }
         } catch {
@@ -1100,6 +1214,7 @@ export async function fetchCLIProxyModels(signal?: AbortSignal) {
             });
 
             if (response.ok) {
+                respondedOkUrl = baseUrl;
                 const payload = (await response.json()) as { data?: FallbackOpenAIModel[] };
                 const includedFallback = (payload.data ?? []).filter((model) => {
                     const id = typeof model.id === "string" ? model.id.trim() : "";
@@ -1113,11 +1228,20 @@ export async function fetchCLIProxyModels(signal?: AbortSignal) {
                     .map((m) => toPiModelFromOpenAI(m, poolLabelsFallback))
                     .filter((model): model is NonNullable<ReturnType<typeof toPiModelFromOpenAI>> => Boolean(model));
 
-                return reconcileActivePoolFacades(mappedFallback, filterData?.confirmedActivePools);
+                const reconciled = reconcileActivePoolFacades(mappedFallback, filterData?.confirmedActivePools);
+                if (reconciled.length > 0) {
+                    return reconciled;
+                }
             }
         } catch {
             // Continúa con la siguiente URL en la cascada
         }
+    }
+
+    // Si el servidor respondió HTTP 200 pero no tiene cuentas ni modelos aún (máquina recién instalada),
+    // exponer un modelo informativo amigable en /model para evitar desconcierto en el usuario
+    if (respondedOkUrl) {
+        return [buildPendingAccountsPlaceholderModel(respondedOkUrl)];
     }
 
     throw new Error("CLIProxyAPI /v1/models failed across all candidate base URLs");
@@ -1201,6 +1325,18 @@ export function initDynamicProvider(pi: ExtensionAPI): void {
                 }
             }
         } catch {}
+    }
+
+    // Inmunidad a Terminal Fantasma: hidratar process.env desde settings.json si no estaban exportadas
+    const settings = resolveCpamcSettings();
+    if (settings.apiKey && !process.env.CLIPROXYAPI_API_KEY) {
+        process.env.CLIPROXYAPI_API_KEY = settings.apiKey;
+    }
+    if (settings.baseUrl && !process.env.CLIPROXYAPI_BASE_URL) {
+        process.env.CLIPROXYAPI_BASE_URL = settings.baseUrl;
+    }
+    if (settings.managementKey && !process.env.CLIPROXYAPI_MANAGEMENT_KEY) {
+        process.env.CLIPROXYAPI_MANAGEMENT_KEY = settings.managementKey;
     }
 
     // Resolve deterministic Project Identity (SHA-256 of active workspace/cwd) for Zero-Config cache affinity

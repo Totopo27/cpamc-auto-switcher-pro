@@ -31,6 +31,18 @@ export function registerModelPicker(pi: any): void {
 				return;
 			}
 
+			// Notificación asistida si el único modelo de CPAMC es el aviso de vinculación pendiente
+			const hasOnlyPlaceholder = availableModels.some((m) => m.id === "sin-cuentas-vinculadas") &&
+				availableModels.filter((m) => m.id !== "sin-cuentas-vinculadas" && (m.provider === "cpamc" || m.provider === "cliproxyapi")).length === 0;
+
+			if (hasOnlyPlaceholder) {
+				context.ui?.notify(
+					"⚠️ CPAMC conectado pero sin cuentas vinculadas. Abre http://localhost:8317/management.html para activar tus modelos.",
+					"warning",
+				);
+				return;
+			}
+
 			const target = args?.trim().toLowerCase();
 
 			// Soporte para auto-balance inteligente mediante argumento (ej: `/cpamc-model auto` o `/cpamc-model best`)
