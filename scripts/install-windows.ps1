@@ -378,76 +378,103 @@ if (-not $ExtensionOnly) {
             Write-Warning "Si estás usando Docker Desktop en Windows, CPAMC usa el contenedor Linux oficial con .so."
         }
     } elseif (-not $ExtensionOnly) {
-        Write-Host "`n  ⚠️ No se detectó CPAMC (CLIProxyAPI) en ejecución en este equipo." -ForegroundColor Yellow
-        $installChoice = Read-Host "  ¿Deseas descargar e instalar automáticamente CLIProxyAPI oficial para Windows (router-for-me/CLIProxyAPI)? [S/n]"
-        if ([string]::IsNullOrWhiteSpace($installChoice) -or $installChoice -match "^[sSyY]") {
-            $cpamcHome = Join-Path $env:USERPROFILE "cliproxyapi"
-            $pluginsDir = Join-Path $cpamcHome "plugins"
-            if (-not (Test-Path $pluginsDir)) {
-                New-Item -ItemType Directory -Force -Path $pluginsDir | Out-Null
+        # Fase 2: Comprobación inteligente de puerto :8317 antes de asumir ausencia o colisión
+        $portInUse = $false
+        $portResponding = $false
+        try {
+            $tcp = New-Object System.Net.Sockets.TcpClient
+            $asyncResult = $tcp.BeginConnect("127.0.0.1", 8317, $null, $null)
+            $wait = $asyncResult.AsyncWaitHandle.WaitOne(800, $false)
+            if ($wait -and $tcp.Connected) {
+                $portInUse = $true
+                $tcp.EndConnect($asyncResult)
+                $tcp.Close()
+                try {
+                    $probe = Invoke-RestMethod -Uri "http://localhost:8317" -TimeoutSec 1 -ErrorAction SilentlyContinue
+                    $portResponding = $true
+                } catch {
+                    # Si respondió con cualquier código HTTP (200, 401, 404), el servidor está vivo
+                    if ($_.Exception.Response) { $portResponding = $true }
+                }
             }
+        } catch {}
 
-            Write-Host "  ⚡ Descargando paquete oficial CLIProxyAPI para Windows..." -ForegroundColor Cyan
-            $releaseApi = "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/latest"
-            $dlUrl = $null
-            try {
-                $releaseJson = Invoke-RestMethod -Uri $releaseApi -Headers @{ "User-Agent" = "AutoSwitcherPro-Installer" } -TimeoutSec 5
-                $asset = $releaseJson.assets | Where-Object { $_.name -match "CLIProxyAPI_.*_windows_amd64\.zip" } | Select-Object -First 1
-                if ($asset) { $dlUrl = $asset.browser_download_url }
-            } catch {}
-
-            if (-not $dlUrl) {
-                $dlUrl = "https://github.com/router-for-me/CLIProxyAPI/releases/latest/download/CLIProxyAPI_8.0.46_windows_amd64.zip"
-            }
-
-            $zipPath = Join-Path $env:TEMP "cliproxyapi-windows.zip"
-            try {
-                Invoke-WebRequest -Uri $dlUrl -OutFile $zipPath -ErrorAction Stop
-                Expand-Archive -Path $zipPath -DestinationPath $cpamcHome -Force
-                Remove-Item -Force -Path $zipPath -ErrorAction SilentlyContinue
-                Write-Host "  ✓ Servidor oficial CLIProxyAPI extraído en: $cpamcHome" -ForegroundColor Green
-
-                # Instalar DLL del plugin
-                $targetDll = Join-Path $pluginsDir "auto-switcher-pro-windows-amd64.dll"
-                if ($binSource -and (Test-Path $binSource)) {
-                    Copy-Item -Force -Path $binSource -Destination $targetDll
-                    Write-Host "  ✓ auto-switcher-pro-windows-amd64.dll copiada desde paquete local." -ForegroundColor Green
-                } else {
-                    $dlDll = "https://github.com/WiloxDev/cpamc-auto-switcher-pro/releases/latest/download/auto-switcher-pro-windows-amd64.dll"
-                    try {
-                        Invoke-WebRequest -Uri $dlDll -OutFile $targetDll -ErrorAction Stop
-                        Write-Host "  ✓ auto-switcher-pro-windows-amd64.dll descargada exitosamente." -ForegroundColor Green
-                    } catch {}
+        if ($portResponding) {
+            Write-Host "`n  🌐 ¡Detectada instancia activa respondiendo en http://localhost:8317!" -ForegroundColor Green
+            Write-Host "     ↳ Se adopta automáticamente la instancia existente sin forzar un nuevo proceso." -ForegroundColor DarkGray
+            $pluginInstalled = $true
+            $Url = "http://localhost:8317"
+        } else {
+            Write-Host "`n  ⚠️ No se detectó CPAMC (CLIProxyAPI) en ejecución en este equipo." -ForegroundColor Yellow
+            $installChoice = Read-Host "  ¿Deseas descargar e instalar automáticamente CLIProxyAPI oficial para Windows (router-for-me/CLIProxyAPI)? [S/n]"
+            if ([string]::IsNullOrWhiteSpace($installChoice) -or $installChoice -match "^[sSyY]") {
+                $cpamcHome = Join-Path $env:USERPROFILE "cliproxyapi"
+                $pluginsDir = Join-Path $cpamcHome "plugins"
+                if (-not (Test-Path $pluginsDir)) {
+                    New-Item -ItemType Directory -Force -Path $pluginsDir | Out-Null
                 }
 
-                # Generar Claves Criptográficas Seguras (Dual: Admin + Consumo API)
-                $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-                
-                # 1. Management Secret Key (para /management.html y /v8/management/*)
-                $mgmtBytes = New-Object byte[] 16
-                $rng.GetBytes($mgmtBytes)
-                $genMgmtKey = [System.BitConverter]::ToString($mgmtBytes).Replace("-", "").ToLower()
-
-                # 2. Client API Key (para consumo de modelos en /v1/models y Gentle-Shell)
-                $apiBytes = New-Object byte[] 16
-                $rng.GetBytes($apiBytes)
-                $genApiKey = "sk-" + [System.BitConverter]::ToString($apiBytes).Replace("-", "").ToLower()
-
-                $Key = $genMgmtKey
-                $Url = "http://localhost:8317"
-
-                # Guardar ambas claves en archivos canónicos locales seguros
+                Write-Host "  ⚡ Descargando paquete oficial CLIProxyAPI para Windows..." -ForegroundColor Cyan
+                $releaseApi = "https://api.github.com/repos/router-for-me/CLIProxyAPI/releases/latest"
+                $dlUrl = $null
                 try {
-                    $mgmtKeyFile = Join-Path $env:USERPROFILE ".cliproxy_management_key"
-                    Set-Content -Path $mgmtKeyFile -Value $genMgmtKey -Encoding UTF8 -Force
-                    
-                    $apiKeyFile = Join-Path $env:USERPROFILE ".cliproxy_api_key"
-                    Set-Content -Path $apiKeyFile -Value $genApiKey -Encoding UTF8 -Force
+                    $releaseJson = Invoke-RestMethod -Uri $releaseApi -Headers @{ "User-Agent" = "AutoSwitcherPro-Installer" } -TimeoutSec 5
+                    $asset = $releaseJson.assets | Where-Object { $_.name -match "CLIProxyAPI_.*_windows_amd64\.zip" } | Select-Object -First 1
+                    if ($asset) { $dlUrl = $asset.browser_download_url }
                 } catch {}
 
-                # Generar config.yaml canónico compatible con CLIProxyAPI v8 oficial (router-for-me)
-                $configFile = Join-Path $cpamcHome "config.yaml"
-                $initialConfig = @"
+                if (-not $dlUrl) {
+                    $dlUrl = "https://github.com/router-for-me/CLIProxyAPI/releases/latest/download/CLIProxyAPI_8.0.46_windows_amd64.zip"
+                }
+
+                $zipPath = Join-Path $env:TEMP "cliproxyapi-windows.zip"
+                try {
+                    Invoke-WebRequest -Uri $dlUrl -OutFile $zipPath -ErrorAction Stop
+                    Expand-Archive -Path $zipPath -DestinationPath $cpamcHome -Force
+                    Remove-Item -Force -Path $zipPath -ErrorAction SilentlyContinue
+                    Write-Host "  ✓ Servidor oficial CLIProxyAPI extraído en: $cpamcHome" -ForegroundColor Green
+
+                    # Instalar DLL del plugin
+                    $targetDll = Join-Path $pluginsDir "auto-switcher-pro-windows-amd64.dll"
+                    if ($binSource -and (Test-Path $binSource)) {
+                        Copy-Item -Force -Path $binSource -Destination $targetDll
+                        Write-Host "  ✓ auto-switcher-pro-windows-amd64.dll copiada desde paquete local." -ForegroundColor Green
+                    } else {
+                        $dlDll = "https://github.com/WiloxDev/cpamc-auto-switcher-pro/releases/latest/download/auto-switcher-pro-windows-amd64.dll"
+                        try {
+                            Invoke-WebRequest -Uri $dlDll -OutFile $targetDll -ErrorAction Stop
+                            Write-Host "  ✓ auto-switcher-pro-windows-amd64.dll descargada exitosamente." -ForegroundColor Green
+                        } catch {}
+                    }
+
+                    # Generar Claves Criptográficas Seguras (Dual: Admin + Consumo API)
+                    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+                    
+                    # 1. Management Secret Key (para /management.html y /v8/management/*)
+                    $mgmtBytes = New-Object byte[] 16
+                    $rng.GetBytes($mgmtBytes)
+                    $genMgmtKey = [System.BitConverter]::ToString($mgmtBytes).Replace("-", "").ToLower()
+
+                    # 2. Client API Key (para consumo de modelos en /v1/models y Gentle-Shell)
+                    $apiBytes = New-Object byte[] 16
+                    $rng.GetBytes($apiBytes)
+                    $genApiKey = "sk-" + [System.BitConverter]::ToString($apiBytes).Replace("-", "").ToLower()
+
+                    $Key = $genMgmtKey
+                    $Url = "http://localhost:8317"
+
+                    # Guardar ambas claves en archivos canónicos locales seguros
+                    try {
+                        $mgmtKeyFile = Join-Path $env:USERPROFILE ".cliproxy_management_key"
+                        Set-Content -Path $mgmtKeyFile -Value $genMgmtKey -Encoding UTF8 -Force
+                        
+                        $apiKeyFile = Join-Path $env:USERPROFILE ".cliproxy_api_key"
+                        Set-Content -Path $apiKeyFile -Value $genApiKey -Encoding UTF8 -Force
+                    } catch {}
+
+                    # Generar config.yaml canónico compatible con CLIProxyAPI v8 oficial (router-for-me)
+                    $configFile = Join-Path $cpamcHome "config.yaml"
+                    $initialConfig = @"
 server:
   port: 8317
 management:
@@ -461,37 +488,38 @@ plugins:
     auto-switcher-pro-windows-amd64:
       enabled: true
 "@
-                Set-Content -Path $configFile -Value $initialConfig -Encoding UTF8
-                Write-Host "  ✓ config.yaml inicial generado con claves de administración (v8) y API separadas." -ForegroundColor Green
+                    Set-Content -Path $configFile -Value $initialConfig -Encoding UTF8
+                    Write-Host "  ✓ config.yaml inicial generado con claves de administración (v8) y API separadas." -ForegroundColor Green
 
-                # Iniciar servidor en segundo plano
-                $exePath = Join-Path $cpamcHome "cli-proxy-api.exe"
-                if (Test-Path $exePath) {
-                    Start-Process -FilePath $exePath -ArgumentList "-config config.yaml" -WorkingDirectory $cpamcHome -WindowStyle Minimized
-                    Write-Host "  ✓ CLIProxyAPI iniciado en segundo plano (puerto :8317)." -ForegroundColor Green
-                    $pluginInstalled = $true
+                    # Iniciar servidor en segundo plano
+                    $exePath = Join-Path $cpamcHome "cli-proxy-api.exe"
+                    if (Test-Path $exePath) {
+                        Start-Process -FilePath $exePath -ArgumentList "-config config.yaml" -WorkingDirectory $cpamcHome -WindowStyle Minimized
+                        Write-Host "  ✓ CLIProxyAPI iniciado en segundo plano (puerto :8317)." -ForegroundColor Green
+                        $pluginInstalled = $true
 
-                    # Persistencia opcional y reversible en shell:startup (sin requerir admin)
-                    try {
-                        $startupFolder = [Environment]::GetFolderPath("Startup")
-                        if ($startupFolder -and (Test-Path $startupFolder)) {
-                            $shortcutPath = Join-Path $startupFolder "CLIProxyAPI.lnk"
-                            $wsh = New-Object -ComObject WScript.Shell
-                            $sc = $wsh.CreateShortcut($shortcutPath)
-                            $sc.TargetPath = $exePath
-                            $sc.Arguments = "-config config.yaml"
-                            $sc.WorkingDirectory = $cpamcHome
-                            $sc.WindowStyle = 7 # Minimized
-                            $sc.Description = "CLIProxyAPI Server Background Startup"
-                            $sc.Save()
-                            Write-Host "  ✓ Acceso directo creado en Inicio para arranque automático al iniciar sesión." -ForegroundColor Green
+                        # Persistencia opcional y reversible en shell:startup (sin requerir admin)
+                        try {
+                            $startupFolder = [Environment]::GetFolderPath("Startup")
+                            if ($startupFolder -and (Test-Path $startupFolder)) {
+                                $shortcutPath = Join-Path $startupFolder "CLIProxyAPI.lnk"
+                                $wsh = New-Object -ComObject WScript.Shell
+                                $sc = $wsh.CreateShortcut($shortcutPath)
+                                $sc.TargetPath = $exePath
+                                $sc.Arguments = "-config config.yaml"
+                                $sc.WorkingDirectory = $cpamcHome
+                                $sc.WindowStyle = 7 # Minimized
+                                $sc.Description = "CLIProxyAPI Server Background Startup"
+                                $sc.Save()
+                                Write-Host "  ✓ Acceso directo creado en Inicio para arranque automático al iniciar sesión." -ForegroundColor Green
+                            }
+                        } catch {
+                            Write-Warning "No se pudo configurar persistencia en Startup: $_"
                         }
-                    } catch {
-                        Write-Warning "No se pudo configurar persistencia en Startup: $_"
                     }
+                } catch {
+                    Write-Warning "Fallo al autodesplegar CPAMC en Windows: $_"
                 }
-            } catch {
-                Write-Warning "Fallo al autodesplegar CPAMC en Windows: $_"
             }
         }
     } else {
@@ -548,6 +576,50 @@ if ([string]::IsNullOrWhiteSpace($currentApiKey) -and -not [string]::IsNullOrWhi
     [Environment]::SetEnvironmentVariable("CLIPROXYAPI_API_KEY", $genApiKey, "User")
     $env:CLIPROXYAPI_API_KEY = $genApiKey
     Write-Host "🔑 CLIPROXYAPI_API_KEY configurada con éxito para consumo de modelos." -ForegroundColor Cyan
+} elseif (-not [string]::IsNullOrWhiteSpace($currentApiKey)) {
+    $env:CLIPROXYAPI_API_KEY = $currentApiKey
+}
+
+# ------------------------------------------------------------------------------
+# 3.0. INYECCIÓN INMUNE EN SETTINGS.JSON (ANTI "TERMINAL FANTASMA")
+# ------------------------------------------------------------------------------
+# Escribir de inmediato en settings.json de cada perfil detectado para que Gentle-Shell
+# herede las credenciales en la sesión actual sin obligar a reiniciar la ventana de terminal
+foreach ($extFolder in $agentTargets) {
+    try {
+        $agentHome = Split-Path -Parent $extFolder
+        $settingsFile = Join-Path $agentHome "settings.json"
+        
+        $effectiveUrl = if (-not [string]::IsNullOrWhiteSpace($Url)) { $Url.TrimEnd("/") } else { $defaultBase }
+        $effectiveApiKey = if (-not [string]::IsNullOrWhiteSpace($env:CLIPROXYAPI_API_KEY)) { $env:CLIPROXYAPI_API_KEY } else { $genApiKey }
+        $effectiveMgmtKey = if (-not [string]::IsNullOrWhiteSpace($env:CLIPROXYAPI_MANAGEMENT_KEY)) { $env:CLIPROXYAPI_MANAGEMENT_KEY } else { $Key }
+
+        $jsonObj = @{}
+        if (Test-Path $settingsFile) {
+            try {
+                $rawContent = Get-Content -Raw -Path $settingsFile -Encoding UTF8
+                if (-not [string]::IsNullOrWhiteSpace($rawContent)) {
+                    $jsonObj = $rawContent | ConvertFrom-Json -AsHashtable
+                }
+            } catch {}
+        }
+
+        if (-not $jsonObj.ContainsKey("cpamc")) {
+            $jsonObj["cpamc"] = @{}
+        }
+
+        $jsonObj["cpamc"]["baseUrl"] = $effectiveUrl
+        if (-not [string]::IsNullOrWhiteSpace($effectiveApiKey)) {
+            $jsonObj["cpamc"]["apiKey"] = $effectiveApiKey
+        }
+        if (-not [string]::IsNullOrWhiteSpace($effectiveMgmtKey)) {
+            $jsonObj["cpamc"]["managementKey"] = $effectiveMgmtKey
+        }
+
+        $updatedJson = $jsonObj | ConvertTo-Json -Depth 5
+        Set-Content -Path $settingsFile -Value $updatedJson -Encoding UTF8 -Force
+        Write-Host "  🛡️ Configuración permanente inyectada en: $settingsFile" -ForegroundColor DarkGray
+    } catch {}
 }
 
 # ------------------------------------------------------------------------------
@@ -584,10 +656,42 @@ try {
 }
 
 # ------------------------------------------------------------------------------
-# 4. LIMPIEZA Y REPORTE FINAL HONESTO
+# 4. LIMPIEZA Y REPORTE FINAL HONESTO CON TEST DE FUEGO INTERACTIVO
 # ------------------------------------------------------------------------------
 if ($tempWorkDir -and (Test-Path $tempWorkDir)) {
     Remove-Item -Recurse -Force -Path $tempWorkDir -ErrorAction SilentlyContinue
+}
+
+# Fase 3: TEST DE FUEGO INTERACTIVO (Validar GET /v1/models con Bearer API Key)
+$testFuegoOk = $false
+$modelsCount = 0
+$targetEndpoint = if (-not [string]::IsNullOrWhiteSpace($Url)) { $Url.TrimEnd("/") } else { "http://localhost:8317" }
+$testApiKey = if (-not [string]::IsNullOrWhiteSpace($env:CLIPROXYAPI_API_KEY)) { $env:CLIPROXYAPI_API_KEY } else { $genApiKey }
+
+if (-not [string]::IsNullOrWhiteSpace($testApiKey)) {
+    Write-Host "`n🔥 Ejecutando Test de Fuego sobre el catálogo de modelos (/v1/models)..." -ForegroundColor Yellow
+    try {
+        $headers = @{
+            "Authorization" = "Bearer $testApiKey"
+            "Accept" = "application/json"
+        }
+        $testRes = Invoke-RestMethod -Uri "$targetEndpoint/v1/models" -Headers $headers -TimeoutSec 3 -ErrorAction Stop
+        if ($testRes -and $testRes.data) {
+            $testFuegoOk = $true
+            $modelsCount = $testRes.data.Count
+            Write-Host "  ✅ [TEST DE FUEGO PASS] Catálogo autenticado con éxito ($modelsCount modelos detectados)." -ForegroundColor Green
+        } else {
+            Write-Host "  ✅ [TEST DE FUEGO PASS] Endpoint /v1/models respondió HTTP 200 con éxito." -ForegroundColor Green
+            $testFuegoOk = $true
+        }
+    } catch {
+        $status = $_.Exception.Response.StatusCode.value__
+        if ($status -eq 401) {
+            Write-Host "  ⚠️ [TEST DE FUEGO] Error de autenticación HTTP 401 en /v1/models. Revisa tu API key." -ForegroundColor Yellow
+        } else {
+            Write-Host "  ℹ️ [TEST DE FUEGO] Servidor en espera de vinculación de cuentas o en arranque (HTTP $status)." -ForegroundColor DarkGray
+        }
+    }
 }
 
 Write-Host "`n==========================================================" -ForegroundColor Green
@@ -616,6 +720,6 @@ Write-Host "`n🚀 PASOS PARA EMPEZAR:" -ForegroundColor White
 Write-Host "  1. Abre la consola web de CPAMC para vincular tu primera cuenta:" -ForegroundColor Gray
 Write-Host "     http://localhost:8317/management.html" -ForegroundColor Cyan
 Write-Host "     (Ingresa tu Management Key si la consola te la solicita)" -ForegroundColor DarkGray
-Write-Host "  2. Abre una NUEVA terminal de PowerShell para heredar las variables y ejecuta:" -ForegroundColor Gray
+Write-Host "  2. En esta misma terminal (o en una nueva), ejecuta tu agente:" -ForegroundColor Gray
 Write-Host "     gentle-shell" -ForegroundColor Yellow
 Write-Host "  3. Escribe /model para seleccionar tus modelos balanceados." -ForegroundColor Gray

@@ -706,49 +706,62 @@ install_extension() {
             echo -e "${GREEN}    [✓] Skills transversales sincronizados en: ${agent_home}/skills${RESET}"
         fi
 
-        # Persistir configuración en settings.json del agente si la URL no es localhost estándar
-        # o si se especificó clave
+        # Persistir configuración en settings.json del agente de forma inmune y permanente
         local settings_file="${agent_home}/settings.json"
-        if [ "$TARGET_URL" != "$DEFAULT_URL" ] || [ -n "$TARGET_KEY" ]; then
-            echo -e "    Configurando endpoint permanente en ${BOLD}${settings_file}${RESET}..."
-            
-            # Si settings.json no existe o está vacío, inicializarlo
-            if [ ! -s "$settings_file" ]; then
-                echo "{}" > "$settings_file"
-            fi
+        local eff_key="${TARGET_API_KEY:-$TARGET_KEY}"
+        echo -e "    Configurando endpoint permanente en ${BOLD}${settings_file}${RESET}..."
+        
+        # Si settings.json no existe o está vacío, inicializarlo
+        if [ ! -s "$settings_file" ]; then
+            echo "{}" > "$settings_file"
+        fi
 
-            # Inyección limpia usando node o python si están disponibles
-            if command -v node >/dev/null 2>&1; then
-                node -e "
-                    const fs = require('fs');
-                    const file = process.argv[1];
-                    const url = process.argv[2];
-                    const key = process.argv[3];
-                    let data = {};
-                    try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch(e){}
-                    data.cpamc = data.cpamc || {};
-                    data.cpamc.baseUrl = url;
-                    if (key) data.cpamc.apiKey = key;
-                    fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
-                " "$settings_file" "$TARGET_URL" "$TARGET_KEY" 2>/dev/null || true
-            fi
+        # Inyección limpia usando node o python si están disponibles
+        if command -v node >/dev/null 2>&1; then
+            node -e "
+                const fs = require('fs');
+                const file = process.argv[1];
+                const url = process.argv[2];
+                const apiKey = process.argv[3];
+                const mgmtKey = process.argv[4];
+                let data = {};
+                try { data = JSON.parse(fs.readFileSync(file, 'utf8')); } catch(e){}
+                data.cpamc = data.cpamc || {};
+                data.cpamc.baseUrl = url;
+                if (apiKey) data.cpamc.apiKey = apiKey;
+                if (mgmtKey) data.cpamc.managementKey = mgmtKey;
+                fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+            " "$settings_file" "$TARGET_URL" "$eff_key" "$TARGET_KEY" 2>/dev/null || true
         fi
     done
 
-    # Exportar variable en ~/.bashrc si no existe para máxima compatibilidad con procesos shell
-    if [ "$TARGET_URL" != "$DEFAULT_URL" ]; then
-        if ! grep -q "CPAMC_URL" "$HOME/.bashrc" 2>/dev/null; then
-            echo -e "\n# CPAMC Auto Switcher Endpoint Config" >> "$HOME/.bashrc"
-            echo "export CPAMC_URL=\"${TARGET_URL}\"" >> "$HOME/.bashrc"
-            [ -n "$TARGET_KEY" ] && echo "export CPAMC_KEY=\"${TARGET_KEY}\"" >> "$HOME/.bashrc"
-            echo -e "${GREEN}    [✓] Variable CPAMC_URL añadida a ~/.bashrc para entornos interactivos.${RESET}"
-        fi
+    # Exportar variables en ~/.bashrc si no existen para máxima compatibilidad con procesos shell
+    if ! grep -q "CPAMC_URL" "$HOME/.bashrc" 2>/dev/null; then
+        echo -e "\n# CPAMC Auto Switcher Endpoint Config" >> "$HOME/.bashrc"
+        echo "export CPAMC_URL=\"${TARGET_URL}\"" >> "$HOME/.bashrc"
+        [ -n "$TARGET_KEY" ] && echo "export CPAMC_KEY=\"${TARGET_KEY}\"" >> "$HOME/.bashrc"
+        [ -n "$TARGET_API_KEY" ] && echo "export CLIPROXYAPI_API_KEY=\"${TARGET_API_KEY}\"" >> "$HOME/.bashrc"
+        echo -e "${GREEN}    [✓] Variables de entorno añadidas a ~/.bashrc para entornos interactivos.${RESET}"
     fi
-
 
     # Limpieza temporal
     if [ -n "$tmp_dir" ] && [ -d "$tmp_dir" ]; then
         rm -rf "$tmp_dir"
+    fi
+
+    # Fase 3: TEST DE FUEGO INTERACTIVO (Validar GET /v1/models con Bearer API Key)
+    local test_key="${TARGET_API_KEY:-$TARGET_KEY}"
+    if [ -n "$test_key" ]; then
+        echo -e "\n${YELLOW}🔥 Ejecutando Test de Fuego sobre el catálogo de modelos (/v1/models)...${RESET}"
+        local http_code
+        http_code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${test_key}" "${TARGET_URL}/v1/models" 2>/dev/null || echo "000")
+        if [ "$http_code" = "200" ]; then
+            echo -e "${GREEN}  ✅ [TEST DE FUEGO PASS] Catálogo autenticado con éxito (HTTP 200).${RESET}"
+        elif [ "$http_code" = "401" ]; then
+            echo -e "${YELLOW}  ⚠️ [TEST DE FUEGO] Error HTTP 401 en /v1/models. Revisa la clave API.${RESET}"
+        else
+            echo -e "${CYAN}  ℹ️ [TEST DE FUEGO] Servidor activo (HTTP ${http_code}), listo para vincular cuentas.${RESET}"
+        fi
     fi
 }
 
