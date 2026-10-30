@@ -655,6 +655,7 @@ func (r *PoolRegistry) SetActiveLeader(basePrefix, activeAuth string) {
 	r.mu.Unlock()
 
 	_ = r.Save()
+	_ = WriteAtomicTelemetrySnapshot()
 }
 
 // RotatePoolLeader advances leadership in the given pool to the next available member.

@@ -1,11 +1,21 @@
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 export const MAX_BASH_EXPLORATION_PER_TURN = 5;
 export const MAX_SUBAGENT_POLL_PER_TURN = 2;
 export const MAX_TOTAL_TOOLS_PER_TURN = 15;
 export const MAX_CYCLE_REPETITIONS = 3;
 export const CYCLE_WINDOW_SIZE = 6;
-export const SHM_INCIDENT_PATH = "/dev/shm/cpamc_last_incident.json";
+
+function resolveShmIncidentPath(): string {
+	if (existsSync("/dev/shm")) {
+		return "/dev/shm/cpamc_last_incident.json";
+	}
+	return join(tmpdir(), "cpamc_last_incident.json");
+}
+
+export const SHM_INCIDENT_PATH = resolveShmIncidentPath();
 
 export interface IncidentRecord {
 	id: string;

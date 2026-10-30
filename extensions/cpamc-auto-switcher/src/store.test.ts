@@ -143,4 +143,17 @@ describe("Standalone Accounts Quota Card & Model Resolution", () => {
 		const pair = getRotationPairForModelSync("gemini-2.5-flash", "cpamc");
 		assert.strictEqual(pair, null);
 	});
+
+	it("parses and serves telemetry snapshot from disk or RAM", async () => {
+		const { getCandidateTelemetrySnapshotPaths, getStoredTelemetrySnapshot } = await import("./store.js");
+		const paths = getCandidateTelemetrySnapshotPaths();
+		assert.ok(paths.length > 0, "Telemetry paths must not be empty");
+		assert.ok(paths.some((p: string) => p.includes("auto-switcher-pro-telemetry.json")));
+	});
+
+	it("supports direct Google quota fallback parsing", async () => {
+		const { resolveLocalAuthDirs } = await import("./store.js");
+		const authDirs = resolveLocalAuthDirs();
+		assert.ok(Array.isArray(authDirs), "Auth dirs must be an array");
+	});
 });

@@ -78,6 +78,7 @@ function resolveSignalFileTargets(): string[] {
     // Prioridad 1: Memoria compartida volátil (/dev/shm) para latencia cero (<5ms)
     if (existsSync("/dev/shm")) {
         targets.add("/dev/shm/auto-switcher-pro.epoch");
+        targets.add("/dev/shm/auto-switcher-pro-telemetry.json");
     }
     if (process.env.AUTO_SWITCHER_STATE_PATH) {
         targets.add(process.env.AUTO_SWITCHER_STATE_PATH);
@@ -87,6 +88,7 @@ function resolveSignalFileTargets(): string[] {
     if (existsSync(servicePluginsDir)) {
         targets.add(join(servicePluginsDir, "auto-switcher-pro.epoch"));
         targets.add(join(servicePluginsDir, "auto-switcher-pro-state.json"));
+        targets.add(join(servicePluginsDir, "auto-switcher-pro-telemetry.json"));
     }
     return Array.from(targets);
 }
